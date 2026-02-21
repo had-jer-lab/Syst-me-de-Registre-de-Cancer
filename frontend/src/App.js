@@ -5,6 +5,8 @@ import './styles/global.css';
 
 import AuthPage   from './pages/AuthPage';
 import Dashboard  from './pages/Dashboard';
+import ImportData from './pages/ImportData';
+import DiscussionRCP from './pages/DiscussionRCP';
 import Page1 from './pages/Page1';
 import Page2 from './pages/Page2';
 import Page3 from './pages/Page3';
@@ -22,6 +24,8 @@ export default function App() {
 
           {/* Dashboard principal */}
           <Route path="/dashboard" element={<Dashboard />} />
+          <Route path="/import"    element={<ImportData />} />
+          <Route path="/rcp"       element={<DiscussionRCP />} />
 
           {/* Formulaire patient en 5 étapes */}
           <Route path="/page1"     element={<Page1 />} />

@@ -82,6 +82,9 @@ export default function Page1() {
               <Field label="Date de naissance">
                 <input className="fi" type="date" value={data.dob} onChange={set('dob')} />
               </Field>
+              <Field label="Âge calculé">
+                <IconInput icon="🎂" value={data.age} readOnly className="fi ro" placeholder="— ans" />
+              </Field>
             </div>
           </SC>
 
@@ -143,7 +146,20 @@ export default function Page1() {
             </Field>
           </SC>
 
-          
+          <SC label="Couverture sociale">
+            <TagGroup
+              options={['CNAS', 'CASNOS', 'APC', 'Militaire', 'Aucune']}
+              value={data.couverture}
+              onChange={v => update({ couverture: v })}
+            />
+          </SC>
+
+          <SC label="Activité professionnelle">
+            <Field label="Profession (optionnel)">
+              <input className="fi" type="text" placeholder="ex: Enseignant, Agriculteur…"
+                value={data.profession} onChange={set('profession')} />
+            </Field>
+          </SC>
         </div>
       </div>
 

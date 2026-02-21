@@ -17,9 +17,9 @@ const STATUS_COLORS = {
 
 const QUICK_ACTIONS = [
   { icon: '➕', label: 'Ajouter patient', sub: 'Nouveau dossier', color: 'linear-gradient(135deg,#4A6CF7,#6B87FF)', path: '/page1', highlight: true },
-  { icon: '🔍', label: 'Rechercher', sub: 'Trouver un dossier', color: 'linear-gradient(135deg,#00C9A7,#00a98b)', path: '/dashboard' },
-  { icon: '📊', label: 'Statistiques', sub: 'Tableaux de bord', color: 'linear-gradient(135deg,#FFA26B,#ff8c4a)', path: '/dashboard' },
-  { icon: '📋', label: 'Rapports', sub: 'Générer un rapport', color: 'linear-gradient(135deg,#9B59B6,#8e44ad)', path: '/dashboard' },
+  { icon: '💬', label: 'Discussion RCP', sub: 'Réunions médicales', color: 'linear-gradient(135deg,#00C9A7,#00a98b)', path: '/rcp' },
+  { icon: '📥', label: 'Import Données', sub: 'CSV / Excel', color: 'linear-gradient(135deg,#FFA26B,#ff8c4a)', path: '/import' },
+  { icon: '📊', label: 'Statistiques', sub: 'Tableaux de bord', color: 'linear-gradient(135deg,#9B59B6,#8e44ad)', path: '/dashboard' },
   { icon: '📅', label: 'Rendez-vous', sub: 'Agenda patients', color: 'linear-gradient(135deg,#FF6B6B,#e74c3c)', path: '/dashboard' },
   { icon: '⚙', label: 'Paramètres', sub: 'Configuration', color: 'linear-gradient(135deg,#5D6D7E,#4a5568)', path: '/dashboard' },
 ];
@@ -28,7 +28,6 @@ const STATS = [
   { label: 'Total patients', value: '1 284', delta: '+12 ce mois', icon: '👥', color: '#4A6CF7' },
   { label: 'Nouveaux (mois)', value: '47', delta: '+8.3%', icon: '📈', color: '#00C9A7' },
   { label: 'En cours de suivi', value: '892', delta: '69.5%', icon: '🔄', color: '#FFA26B' },
-  { label: 'Stade IV actifs', value: '134', delta: '10.4%', icon: '⚠', color: '#FF6B6B' },
 ];
 
 export default function Dashboard() {

@@ -196,7 +196,7 @@ export default function CancerRegistryAuth() {
           <input
             type="text" name="identifier"
             value={loginData.identifier} onChange={handleLoginInputChange}
-            className="w-full pl-12 pr-4 py-4 bg-gray-50 border-2 border-gray-200 rounded-2xl focus:outline-none focus:border-teal-600 focus:bg-white transition-all text-gray-900"
+            className="w-full pl-12 pr-4 py-4 bg-gray-50 border-2 border-gray-200 rounded-2xl focus:outline-none focus:border-blue-600 focus:bg-white transition-all text-gray-900"
             placeholder={userType === 'medecin' ? 'exemple@chu.dz' : 'Votre identifiant'}
           />
         </div>
@@ -205,7 +205,7 @@ export default function CancerRegistryAuth() {
       <div>
         <div className="flex items-center justify-between mb-2">
           <label className="block text-sm font-semibold text-gray-700">Mot de passe</label>
-          <button type="button" className="text-sm text-teal-600 hover:text-teal-700 font-medium">
+          <button type="button" className="text-sm text-blue-600 hover:text-blue-700 font-medium">
             Mot de passe oublié?
           </button>
         </div>
@@ -216,7 +216,7 @@ export default function CancerRegistryAuth() {
           <input
             type={showPassword ? 'text' : 'password'} name="password"
             value={loginData.password} onChange={handleLoginInputChange}
-            className="w-full pl-12 pr-12 py-4 bg-gray-50 border-2 border-gray-200 rounded-2xl focus:outline-none focus:border-teal-600 focus:bg-white transition-all text-gray-900"
+            className="w-full pl-12 pr-12 py-4 bg-gray-50 border-2 border-gray-200 rounded-2xl focus:outline-none focus:border-blue-600 focus:bg-white transition-all text-gray-900"
             placeholder="••••••••"
           />
           <button type="button" onClick={() => setShowPassword(!showPassword)}
@@ -235,12 +235,12 @@ export default function CancerRegistryAuth() {
 
       <div className="flex items-center">
         <input id="remember" type="checkbox"
-          className="w-4 h-4 text-teal-600 bg-gray-100 border-gray-300 rounded focus:ring-teal-500" />
+          className="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500" />
         <label htmlFor="remember" className="ml-2 text-sm text-gray-600">Se souvenir de moi</label>
       </div>
 
       <button type="submit" disabled={isLoading}
-        className="w-full bg-gradient-to-r from-teal-600 to-teal-700 text-white py-4 px-6 rounded-2xl font-semibold hover:from-teal-700 hover:to-teal-800 transition-all shadow-lg shadow-teal-600/30 hover:shadow-xl disabled:opacity-50 flex items-center justify-center gap-2">
+        className="w-full bg-gradient-to-r from-blue-600 to-blue-700 text-white py-4 px-6 rounded-2xl font-semibold hover:from-blue-700 hover:to-blue-800 transition-all shadow-lg shadow-blue-600/30 hover:shadow-xl disabled:opacity-50 flex items-center justify-center gap-2">
         {isLoading ? (
           <>
             <svg className="animate-spin h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
@@ -262,14 +262,14 @@ export default function CancerRegistryAuth() {
         <div>
           <label className="block text-sm font-semibold text-gray-700 mb-2">Nom *</label>
           <input type="text" name="nom" value={registerData.nom} onChange={handleRegisterInputChange}
-            className={`w-full px-4 py-3 bg-gray-50 border-2 rounded-xl focus:outline-none focus:bg-white transition-all ${errors.nom ? 'border-red-500' : 'border-gray-200 focus:border-teal-600'}`}
+            className={`w-full px-4 py-3 bg-gray-50 border-2 rounded-xl focus:outline-none focus:bg-white transition-all ${errors.nom ? 'border-red-500' : 'border-gray-200 focus:border-blue-600'}`}
             placeholder="Nom" />
           {errors.nom && <p className="text-red-500 text-xs mt-1">{errors.nom}</p>}
         </div>
         <div>
           <label className="block text-sm font-semibold text-gray-700 mb-2">Prénom *</label>
           <input type="text" name="prenom" value={registerData.prenom} onChange={handleRegisterInputChange}
-            className={`w-full px-4 py-3 bg-gray-50 border-2 rounded-xl focus:outline-none focus:bg-white transition-all ${errors.prenom ? 'border-red-500' : 'border-gray-200 focus:border-teal-600'}`}
+            className={`w-full px-4 py-3 bg-gray-50 border-2 rounded-xl focus:outline-none focus:bg-white transition-all ${errors.prenom ? 'border-red-500' : 'border-gray-200 focus:border-blue-600'}`}
             placeholder="Prénom" />
           {errors.prenom && <p className="text-red-500 text-xs mt-1">{errors.prenom}</p>}
         </div>
@@ -279,7 +279,7 @@ export default function CancerRegistryAuth() {
         <div className="relative">
           <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none"><Mail className="h-5 w-5 text-gray-400" /></div>
           <input type="email" name="email" value={registerData.email} onChange={handleRegisterInputChange}
-            className={`w-full pl-12 pr-4 py-3 bg-gray-50 border-2 rounded-xl focus:outline-none focus:bg-white transition-all ${errors.email ? 'border-red-500' : 'border-gray-200 focus:border-teal-600'}`}
+            className={`w-full pl-12 pr-4 py-3 bg-gray-50 border-2 rounded-xl focus:outline-none focus:bg-white transition-all ${errors.email ? 'border-red-500' : 'border-gray-200 focus:border-blue-600'}`}
             placeholder="exemple@hopital.dz" />
         </div>
         {errors.email && <p className="text-red-500 text-xs mt-1">{errors.email}</p>}
@@ -289,7 +289,7 @@ export default function CancerRegistryAuth() {
         <div className="relative">
           <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none"><Phone className="h-5 w-5 text-gray-400" /></div>
           <input type="tel" name="telephone" value={registerData.telephone} onChange={handleRegisterInputChange}
-            className={`w-full pl-12 pr-4 py-3 bg-gray-50 border-2 rounded-xl focus:outline-none focus:bg-white transition-all ${errors.telephone ? 'border-red-500' : 'border-gray-200 focus:border-teal-600'}`}
+            className={`w-full pl-12 pr-4 py-3 bg-gray-50 border-2 rounded-xl focus:outline-none focus:bg-white transition-all ${errors.telephone ? 'border-red-500' : 'border-gray-200 focus:border-blue-600'}`}
             placeholder="0555123456" />
         </div>
         {errors.telephone && <p className="text-red-500 text-xs mt-1">{errors.telephone}</p>}
@@ -304,7 +304,7 @@ export default function CancerRegistryAuth() {
           <div>
             <label className="block text-sm font-semibold text-gray-700 mb-2">N° d'inscription à l'ordre *</label>
             <input type="text" name="numeroMedecin" value={registerData.numeroMedecin} onChange={handleRegisterInputChange}
-              className={`w-full px-4 py-3 bg-gray-50 border-2 rounded-xl focus:outline-none focus:bg-white transition-all ${errors.numeroMedecin ? 'border-red-500' : 'border-gray-200 focus:border-teal-600'}`}
+              className={`w-full px-4 py-3 bg-gray-50 border-2 rounded-xl focus:outline-none focus:bg-white transition-all ${errors.numeroMedecin ? 'border-red-500' : 'border-gray-200 focus:border-blue-600'}`}
               placeholder="123456789" />
             {errors.numeroMedecin && <p className="text-red-500 text-xs mt-1">{errors.numeroMedecin}</p>}
           </div>
@@ -313,7 +313,7 @@ export default function CancerRegistryAuth() {
             <div className="relative">
               <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none"><Briefcase className="h-5 w-5 text-gray-400" /></div>
               <select name="specialite" value={registerData.specialite} onChange={handleRegisterInputChange}
-                className={`w-full pl-12 pr-4 py-3 bg-gray-50 border-2 rounded-xl focus:outline-none focus:bg-white transition-all appearance-none ${errors.specialite ? 'border-red-500' : 'border-gray-200 focus:border-teal-600'}`}>
+                className={`w-full pl-12 pr-4 py-3 bg-gray-50 border-2 rounded-xl focus:outline-none focus:bg-white transition-all appearance-none ${errors.specialite ? 'border-red-500' : 'border-gray-200 focus:border-blue-600'}`}>
                 <option value="">Sélectionnez</option>
                 {specialites.map(spec => <option key={spec} value={spec}>{spec}</option>)}
               </select>
@@ -325,7 +325,7 @@ export default function CancerRegistryAuth() {
             <div className="relative">
               <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none"><Building2 className="h-5 w-5 text-gray-400" /></div>
               <input type="text" name="etablissement" value={registerData.etablissement} onChange={handleRegisterInputChange}
-                className={`w-full pl-12 pr-4 py-3 bg-gray-50 border-2 rounded-xl focus:outline-none focus:bg-white transition-all ${errors.etablissement ? 'border-red-500' : 'border-gray-200 focus:border-teal-600'}`}
+                className={`w-full pl-12 pr-4 py-3 bg-gray-50 border-2 rounded-xl focus:outline-none focus:bg-white transition-all ${errors.etablissement ? 'border-red-500' : 'border-gray-200 focus:border-blue-600'}`}
                 placeholder="CHU Tlemcen" />
             </div>
             {errors.etablissement && <p className="text-red-500 text-xs mt-1">{errors.etablissement}</p>}
@@ -338,7 +338,7 @@ export default function CancerRegistryAuth() {
             <div className="relative">
               <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none"><ShieldCheck className="h-5 w-5 text-gray-400" /></div>
               <input type="text" name="fonction" value={registerData.fonction} onChange={handleRegisterInputChange}
-                className={`w-full pl-12 pr-4 py-3 bg-gray-50 border-2 rounded-xl focus:outline-none focus:bg-white transition-all ${errors.fonction ? 'border-red-500' : 'border-gray-200 focus:border-teal-600'}`}
+                className={`w-full pl-12 pr-4 py-3 bg-gray-50 border-2 rounded-xl focus:outline-none focus:bg-white transition-all ${errors.fonction ? 'border-red-500' : 'border-gray-200 focus:border-blue-600'}`}
                 placeholder="Ex: Administrateur Système" />
             </div>
             {errors.fonction && <p className="text-red-500 text-xs mt-1">{errors.fonction}</p>}
@@ -348,7 +348,7 @@ export default function CancerRegistryAuth() {
             <div className="relative">
               <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none"><Building2 className="h-5 w-5 text-gray-400" /></div>
               <input type="text" name="departement" value={registerData.departement} onChange={handleRegisterInputChange}
-                className={`w-full pl-12 pr-4 py-3 bg-gray-50 border-2 rounded-xl focus:outline-none focus:bg-white transition-all ${errors.departement ? 'border-red-500' : 'border-gray-200 focus:border-teal-600'}`}
+                className={`w-full pl-12 pr-4 py-3 bg-gray-50 border-2 rounded-xl focus:outline-none focus:bg-white transition-all ${errors.departement ? 'border-red-500' : 'border-gray-200 focus:border-blue-600'}`}
                 placeholder="Registre National du Cancer" />
             </div>
             {errors.departement && <p className="text-red-500 text-xs mt-1">{errors.departement}</p>}
@@ -358,7 +358,7 @@ export default function CancerRegistryAuth() {
             <div className="relative">
               <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none"><Shield className="h-5 w-5 text-gray-400" /></div>
               <select name="niveauAcces" value={registerData.niveauAcces} onChange={handleRegisterInputChange}
-                className={`w-full pl-12 pr-4 py-3 bg-gray-50 border-2 rounded-xl focus:outline-none focus:bg-white transition-all appearance-none ${errors.niveauAcces ? 'border-red-500' : 'border-gray-200 focus:border-teal-600'}`}>
+                className={`w-full pl-12 pr-4 py-3 bg-gray-50 border-2 rounded-xl focus:outline-none focus:bg-white transition-all appearance-none ${errors.niveauAcces ? 'border-red-500' : 'border-gray-200 focus:border-blue-600'}`}>
                 <option value="">Sélectionnez</option>
                 {niveauxAcces.map(niveau => <option key={niveau} value={niveau}>{niveau}</option>)}
               </select>
@@ -373,7 +373,7 @@ export default function CancerRegistryAuth() {
           <div className="relative">
             <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none"><MapPin className="h-5 w-5 text-gray-400" /></div>
             <select name="wilaya" value={registerData.wilaya} onChange={handleRegisterInputChange}
-              className={`w-full pl-12 pr-4 py-3 bg-gray-50 border-2 rounded-xl focus:outline-none focus:bg-white transition-all appearance-none ${errors.wilaya ? 'border-red-500' : 'border-gray-200 focus:border-teal-600'}`}>
+              className={`w-full pl-12 pr-4 py-3 bg-gray-50 border-2 rounded-xl focus:outline-none focus:bg-white transition-all appearance-none ${errors.wilaya ? 'border-red-500' : 'border-gray-200 focus:border-blue-600'}`}>
               <option value="">Sélectionnez</option>
               {wilayas.map(w => <option key={w} value={w}>{w}</option>)}
             </select>
@@ -383,7 +383,7 @@ export default function CancerRegistryAuth() {
         <div>
           <label className="block text-sm font-semibold text-gray-700 mb-2">Commune *</label>
           <input type="text" name="commune" value={registerData.commune} onChange={handleRegisterInputChange}
-            className={`w-full px-4 py-3 bg-gray-50 border-2 rounded-xl focus:outline-none focus:bg-white transition-all ${errors.commune ? 'border-red-500' : 'border-gray-200 focus:border-teal-600'}`}
+            className={`w-full px-4 py-3 bg-gray-50 border-2 rounded-xl focus:outline-none focus:bg-white transition-all ${errors.commune ? 'border-red-500' : 'border-gray-200 focus:border-blue-600'}`}
             placeholder="Commune" />
           {errors.commune && <p className="text-red-500 text-xs mt-1">{errors.commune}</p>}
         </div>
@@ -399,7 +399,7 @@ export default function CancerRegistryAuth() {
           <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none"><Lock className="h-5 w-5 text-gray-400" /></div>
           <input type={showPassword ? 'text' : 'password'} name="password"
             value={registerData.password} onChange={handleRegisterInputChange}
-            className={`w-full pl-12 pr-12 py-3 bg-gray-50 border-2 rounded-xl focus:outline-none focus:bg-white transition-all ${errors.password ? 'border-red-500' : 'border-gray-200 focus:border-teal-600'}`}
+            className={`w-full pl-12 pr-12 py-3 bg-gray-50 border-2 rounded-xl focus:outline-none focus:bg-white transition-all ${errors.password ? 'border-red-500' : 'border-gray-200 focus:border-blue-600'}`}
             placeholder="Min. 8 caractères" />
           <button type="button" onClick={() => setShowPassword(!showPassword)}
             className="absolute inset-y-0 right-0 pr-4 flex items-center text-gray-400 hover:text-gray-600">
@@ -414,7 +414,7 @@ export default function CancerRegistryAuth() {
           <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none"><Lock className="h-5 w-5 text-gray-400" /></div>
           <input type={showConfirmPassword ? 'text' : 'password'} name="confirmPassword"
             value={registerData.confirmPassword} onChange={handleRegisterInputChange}
-            className={`w-full pl-12 pr-12 py-3 bg-gray-50 border-2 rounded-xl focus:outline-none focus:bg-white transition-all ${errors.confirmPassword ? 'border-red-500' : 'border-gray-200 focus:border-teal-600'}`}
+            className={`w-full pl-12 pr-12 py-3 bg-gray-50 border-2 rounded-xl focus:outline-none focus:bg-white transition-all ${errors.confirmPassword ? 'border-red-500' : 'border-gray-200 focus:border-blue-600'}`}
             placeholder="Retapez" />
           <button type="button" onClick={() => setShowConfirmPassword(!showConfirmPassword)}
             className="absolute inset-y-0 right-0 pr-4 flex items-center text-gray-400 hover:text-gray-600">
@@ -423,18 +423,18 @@ export default function CancerRegistryAuth() {
         </div>
         {errors.confirmPassword && <p className="text-red-500 text-xs mt-1">{errors.confirmPassword}</p>}
       </div>
-      <div className="bg-teal-50 border-2 border-teal-200 rounded-xl p-4 space-y-3">
+      <div className="bg-blue-50 border-2 border-blue-200 rounded-xl p-4 space-y-3">
         <div className="flex items-start">
           <input id="acceptTerms" name="acceptTerms" type="checkbox"
             checked={registerData.acceptTerms} onChange={handleRegisterInputChange}
-            className="w-4 h-4 text-teal-600 bg-gray-100 border-gray-300 rounded focus:ring-teal-500 mt-1" />
+            className="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500 mt-1" />
           <label htmlFor="acceptTerms" className="ml-3 text-sm text-gray-700">J'accepte les conditions d'utilisation</label>
         </div>
         {errors.acceptTerms && <p className="text-red-500 text-xs ml-7">{errors.acceptTerms}</p>}
         <div className="flex items-start">
           <input id="acceptData" name="acceptData" type="checkbox"
             checked={registerData.acceptData} onChange={handleRegisterInputChange}
-            className="w-4 h-4 text-teal-600 bg-gray-100 border-gray-300 rounded focus:ring-teal-500 mt-1" />
+            className="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500 mt-1" />
           <label htmlFor="acceptData" className="ml-3 text-sm text-gray-700">J'accepte la politique de confidentialité</label>
         </div>
         {errors.acceptData && <p className="text-red-500 text-xs ml-7">{errors.acceptData}</p>}
@@ -448,7 +448,7 @@ export default function CancerRegistryAuth() {
         <React.Fragment key={step}>
           <div className="flex flex-col items-center">
             <div className={`w-12 h-12 rounded-full flex items-center justify-center font-bold transition-all duration-300 ${
-              currentStep >= step ? 'bg-teal-600 text-white shadow-lg shadow-teal-600/30' : 'bg-gray-200 text-gray-500'
+              currentStep >= step ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/30' : 'bg-gray-200 text-gray-500'
             }`}>
               {currentStep > step ? <CheckCircle className="w-6 h-6" /> : step}
             </div>
@@ -457,7 +457,7 @@ export default function CancerRegistryAuth() {
             </span>
           </div>
           {step < 3 && (
-            <div className={`w-20 h-1 mx-2 rounded transition-all duration-300 ${currentStep > step ? 'bg-teal-600' : 'bg-gray-200'}`} />
+            <div className={`w-20 h-1 mx-2 rounded transition-all duration-300 ${currentStep > step ? 'bg-blue-600' : 'bg-gray-200'}`} />
           )}
         </React.Fragment>
       ))}
@@ -466,11 +466,11 @@ export default function CancerRegistryAuth() {
 
   // ── MAIN RENDER ────────────────────────────────────────────────────────────
   return (
-    <div className="min-h-screen bg-gradient-to-br from-teal-50 via-white to-cyan-50 flex items-center justify-center p-4">
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-blue-50 flex items-center justify-center p-4">
       {/* Background */}
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
-        <div className="absolute top-0 right-0 w-96 h-96 bg-teal-100 rounded-full mix-blend-multiply filter blur-3xl opacity-30 animate-blob"></div>
-        <div className="absolute bottom-0 left-0 w-96 h-96 bg-cyan-100 rounded-full mix-blend-multiply filter blur-3xl opacity-30 animate-blob animation-delay-2000"></div>
+        <div className="absolute top-0 right-0 w-96 h-96 bg-blue-100 rounded-full mix-blend-multiply filter blur-3xl opacity-30 animate-blob"></div>
+        <div className="absolute bottom-0 left-0 w-96 h-96 bg-blue-100 rounded-full mix-blend-multiply filter blur-3xl opacity-30 animate-blob animation-delay-2000"></div>
       </div>
 
       <div className="w-full max-w-5xl relative">
@@ -478,7 +478,7 @@ export default function CancerRegistryAuth() {
           <div className="grid md:grid-cols-2 gap-0">
 
             {/* ── LEFT PANEL ── */}
-            <div className="bg-gradient-to-br from-teal-600 via-teal-700 to-cyan-800 p-12 text-white flex flex-col justify-between relative overflow-hidden">
+            <div className="bg-gradient-to-br from-blue-600 via-blue-700 to-blue-800 p-12 text-white flex flex-col justify-between relative overflow-hidden">
               <div className="absolute inset-0 opacity-10">
                 <div className="absolute top-10 left-10 w-32 h-32 border-2 border-white rounded-full"></div>
                 <div className="absolute bottom-20 right-10 w-24 h-24 border-2 border-white rounded-full"></div>
@@ -490,7 +490,7 @@ export default function CancerRegistryAuth() {
                   </div>
                   <div>
                     <h1 className="text-2xl font-bold tracking-tight">Registre de Cancer</h1>
-                    <p className="text-teal-200 text-sm">Système de Gestion Oncologique</p>
+                    <p className="text-blue-200 text-sm">Système de Gestion Oncologique</p>
                   </div>
                 </div>
                 <div className="space-y-6 mt-16">
@@ -500,7 +500,7 @@ export default function CancerRegistryAuth() {
                     </div>
                     <div>
                       <h3 className="font-semibold text-lg mb-1">Gestion Complète</h3>
-                      <p className="text-teal-200 text-sm leading-relaxed">Base de données centralisée des cas de cancer</p>
+                      <p className="text-blue-200 text-sm leading-relaxed">Base de données centralisée des cas de cancer</p>
                     </div>
                   </div>
                   <div className="flex items-start gap-4">
@@ -509,7 +509,7 @@ export default function CancerRegistryAuth() {
                     </div>
                     <div>
                       <h3 className="font-semibold text-lg mb-1">Suivi Thérapeutique</h3>
-                      <p className="text-teal-200 text-sm leading-relaxed">Traçabilité complète des parcours de soins</p>
+                      <p className="text-blue-200 text-sm leading-relaxed">Traçabilité complète des parcours de soins</p>
                     </div>
                   </div>
                   <div className="flex items-start gap-4">
@@ -518,13 +518,13 @@ export default function CancerRegistryAuth() {
                     </div>
                     <div>
                       <h3 className="font-semibold text-lg mb-1">Collaboration Médicale</h3>
-                      <p className="text-teal-200 text-sm leading-relaxed">Plateforme sécurisée pour les équipes soignantes</p>
+                      <p className="text-blue-200 text-sm leading-relaxed">Plateforme sécurisée pour les équipes soignantes</p>
                     </div>
                   </div>
                 </div>
               </div>
               <div className="relative z-10 mt-12">
-                <p className="text-teal-200 text-sm">© 2026 Registre National du Cancer • Algérie</p>
+                <p className="text-blue-200 text-sm">© 2026 Registre National du Cancer • Algérie</p>
               </div>
             </div>
 
@@ -539,25 +539,7 @@ export default function CancerRegistryAuth() {
                 </p>
               </div>
 
-              {/* User Type */}
-              <div className="flex gap-3 mb-8">
-                <button onClick={() => { setUserType('medecin'); setCurrentStep(1); setErrors({}); }}
-                  className={`flex-1 py-4 px-6 rounded-2xl font-semibold transition-all duration-300 ${
-                    userType === 'medecin' ? 'bg-teal-600 text-white shadow-lg shadow-teal-600/30 scale-105' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                  }`}>
-                  <div className="flex items-center justify-center gap-2">
-                    <User className="w-5 h-5" /><span>Médecin</span>
-                  </div>
-                </button>
-                <button onClick={() => { setUserType('admin'); setCurrentStep(1); setErrors({}); }}
-                  className={`flex-1 py-4 px-6 rounded-2xl font-semibold transition-all duration-300 ${
-                    userType === 'admin' ? 'bg-teal-600 text-white shadow-lg shadow-teal-600/30 scale-105' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                  }`}>
-                  <div className="flex items-center justify-center gap-2">
-                    <ShieldCheck className="w-5 h-5" /><span>Admin</span>
-                  </div>
-                </button>
-              </div>
+
 
               {/* Forms */}
               {authMode === 'login' ? (
@@ -579,12 +561,12 @@ export default function CancerRegistryAuth() {
                     )}
                     {currentStep < 3 ? (
                       <button type="button" onClick={handleNextStep}
-                        className="flex-1 bg-gradient-to-r from-teal-600 to-teal-700 text-white py-4 px-6 rounded-2xl font-semibold hover:from-teal-700 hover:to-teal-800 transition-all shadow-lg shadow-teal-600/30">
+                        className="flex-1 bg-gradient-to-r from-blue-600 to-blue-700 text-white py-4 px-6 rounded-2xl font-semibold hover:from-blue-700 hover:to-blue-800 transition-all shadow-lg shadow-blue-600/30">
                         Suivant
                       </button>
                     ) : (
                       <button type="submit" disabled={isLoading}
-                        className="flex-1 bg-gradient-to-r from-teal-600 to-teal-700 text-white py-4 px-6 rounded-2xl font-semibold hover:from-teal-700 hover:to-teal-800 transition-all shadow-lg shadow-teal-600/30 disabled:opacity-50 flex items-center justify-center gap-2">
+                        className="flex-1 bg-gradient-to-r from-blue-600 to-blue-700 text-white py-4 px-6 rounded-2xl font-semibold hover:from-blue-700 hover:to-blue-800 transition-all shadow-lg shadow-blue-600/30 disabled:opacity-50 flex items-center justify-center gap-2">
                         {isLoading ? (
                           <><svg className="animate-spin h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                             <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
@@ -597,26 +579,7 @@ export default function CancerRegistryAuth() {
                 </form>
               )}
 
-              {/* Toggle */}
-              <div className="mt-8 text-center">
-                <p className="text-sm text-gray-600">
-                  {authMode === 'login' ? (
-                    <>Pas encore de compte?{' '}
-                      <button onClick={() => { setAuthMode('register'); setCurrentStep(1); setErrors({}); }}
-                        className="text-teal-600 hover:text-teal-700 font-semibold hover:underline">
-                        Créer un compte
-                      </button>
-                    </>
-                  ) : (
-                    <>Déjà inscrit?{' '}
-                      <button onClick={() => { setAuthMode('login'); setErrors({}); }}
-                        className="text-teal-600 hover:text-teal-700 font-semibold hover:underline">
-                        Se connecter
-                      </button>
-                    </>
-                  )}
-                </p>
-              </div>
+
             </div>
 
           </div>
@@ -641,3 +604,6 @@ export default function CancerRegistryAuth() {
     </div>
   );
 }
+
+
+

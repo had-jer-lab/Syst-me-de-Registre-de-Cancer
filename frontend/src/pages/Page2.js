@@ -10,13 +10,28 @@ const ORGANES = [
   'Os / Tissu mou','Lymphome','Leucémie','Mélanome cutané','Cerveau / SNC','ORL','Autre'
 ];
 
-const HISTOS = [
-  'Adénocarcinome','Carcinome épidermoïde','Carcinome canalaire infiltrant',
-  'Carcinome lobulaire infiltrant','Carcinome in situ',
-  'Lymphome B diffus à grandes cellules','Lymphome de Hodgkin',
-  'Lymphome T périphérique','Leucémie myéloïde aiguë','Leucémie lymphoïde chronique',
-  'Sarcome des parties molles','Mélanome','Glioblastome','Carcinome hépatocellulaire','Autre'
-];
+// Sous-types par organe
+const SOUS_TYPES = {
+  'Sein': ['Canalaire invasif','Lobulaire invasif','Inflammatoire','Tubulaire','Mucineux','Médullaire','Papillaire','Triple négatif','Autre'],
+  'Poumon': ['Adénocarcinome','Carcinome épidermoïde','Carcinome à petites cellules','Carcinome à grandes cellules','Carcinome neuroendocrine','Autre'],
+  'Côlon / Rectum': ['Adénocarcinome','Tumeur neuroendocrine','Lymphome colorectal','Tumeur stromale','Autre'],
+  'Prostate': ['Adénocarcinome acinaire','Adénocarcinome canalaire','Carcinome neuroendocrine','Carcinome à petites cellules','Autre'],
+  'Col de l\'utérus': ['Carcinome épidermoïde','Adénocarcinome','Adénosquameux','Neuroendocrine','Autre'],
+  'Thyroïde': ['Papillaire','Folliculaire','Médullaire','Anaplasique','Autre'],
+  'Foie / Voies biliaires': ['Carcinome hépatocellulaire','Cholangiocarcinome','Angiosarcome','Hépatoblastome','Autre'],
+  'Estomac': ['Adénocarcinome intestinal','Adénocarcinome diffus','Lymphome MALT','Tumeur stromale (GIST)','Autre'],
+  'Pancréas': ['Adénocarcinome canalaire','Tumeur neuroendocrine','Cystadénocarcinome','Tumeur pseudopapillaire','Autre'],
+  'Ovaire': ['Séreux','Mucineux','Endométrioïde','À cellules claires','Tumeur germinale','Autre'],
+  'Rein': ['Carcinome à cellules claires','Carcinome papillaire','Carcinome chromophobe','Tumeur de Wilms','Autre'],
+  'Vessie': ['Carcinome urothélial','Carcinome épidermoïde','Adénocarcinome','Carcinome à petites cellules','Autre'],
+  'Os / Tissu mou': ['Ostéosarcome','Sarcome d\'Ewing','Chondrosarcome','Liposarcome','Fibrosarcome','Autre'],
+  'Lymphome': ['Hodgkin classique','Hodgkin nodulaire','B diffus grandes cellules','Folliculaire','MALT','Burkitt','T périphérique','Autre'],
+  'Leucémie': ['Myéloïde aiguë (LAM)','Lymphoïde aiguë (LAL)','Myéloïde chronique (LMC)','Lymphoïde chronique (LLC)','Autre'],
+  'Mélanome cutané': ['Superficiel extensif','Nodulaire','Lentigo malin','Acral lentigineux','Autre'],
+  'Cerveau / SNC': ['Glioblastome','Astrocytome','Oligodendrogliome','Épendymome','Médulloblastome','Méningiome','Autre'],
+  'ORL': ['Carcinome épidermoïde cavité buccale','Carcinome nasopharynx','Carcinome larynx','Adénocarcinome glandes salivaires','Autre'],
+  'Autre': ['Non spécifié']
+};
 
 export default function Page2() {
   const navigate = useNavigate();
@@ -68,24 +83,16 @@ export default function Page2() {
             </div>
           </SC>
 
-          <SC label="Stade TNM">
-            <CircleGroup
-              options={['I', 'II', 'III', 'IV']}
-              value={data.stade}
-              onChange={v => update({ stade: v })}
-            />
-            <div className="stade-tnm">
-              {[
-                { key: 'tnmT', label: 'T — Tumeur', opts: ['Tx','T0','Tis','T1','T2','T3','T4'] },
-                { key: 'tnmN', label: 'N — Ganglion', opts: ['Nx','N0','N1','N2','N3'] },
-                { key: 'tnmM', label: 'M — Métastase', opts: ['Mx','M0','M1'] },
-              ].map(({ key, label, opts }) => (
-                <div className="tnm-box" key={key}>
-                  <div className="fl" style={{ textAlign: 'center', color: 'var(--primary)', marginBottom: 6 }}>{label}</div>
-                  <Select options={opts} value={data[key]} onChange={set(key)} />
-                </div>
-              ))}
-            </div>
+          <SC label="Sous-type de cancer">
+            <Field label="Sélectionner le sous-type">
+              <Select 
+                options={data.organe && SOUS_TYPES[data.organe] ? SOUS_TYPES[data.organe] : ['Sélectionner un organe d\'abord']}
+                placeholder={data.organe ? "Sélectionner le sous-type…" : "Sélectionner un organe d'abord"}
+                value={data.sousType} 
+                onChange={set('sousType')}
+                disabled={!data.organe}
+              />
+            </Field>
           </SC>
 
           <SC label="Traitement en cours">
@@ -114,35 +121,6 @@ export default function Page2() {
             </Field>
             <Field label="Date de la première consultation" style={{ marginTop: 10 }}>
               <input className="fi" type="date" value={data.consultDate} onChange={set('consultDate')} />
-            </Field>
-          </SC>
-
-          <SC label="Histologie / Type moléculaire">
-            <Field label="Type histologique">
-              <Select options={HISTOS} placeholder="Sélectionner…"
-                value={data.histo} onChange={set('histo')} />
-            </Field>
-
-            <div className="field-row c2" style={{ marginTop: 12 }}>
-              <Field label="Taille tumorale (cm)">
-                <div className="fi-wrap">
-                  <input className="fi" type="number" step="0.1" placeholder="ex: 4.2"
-                    value={data.taille} onChange={set('taille')} />
-                  <span className="fi-unit">cm</span>
-                </div>
-              </Field>
-              <Field label="Grade SBR / OMS">
-                <Select options={['Grade 1','Grade 2','Grade 3']} placeholder="—"
-                  value={data.grade} onChange={set('grade')} />
-              </Field>
-            </div>
-
-            <Field label="Récepteurs hormonaux (si sein)" style={{ marginTop: 12 }}>
-              <TagGroup
-                options={['RH+', 'RH−', 'HER2+', 'HER2−', 'Triple négatif']}
-                value={data.recepteurs}
-                onChange={v => update({ recepteurs: v })}
-              />
             </Field>
           </SC>
 
