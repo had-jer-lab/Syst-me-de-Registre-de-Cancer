@@ -3,6 +3,7 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { PatientProvider } from './context/PatientContext';
 import './styles/global.css';
 
+import AdminDashboard from './pages/AdminDashboard';
 import AuthPage   from './pages/AuthPage';
 import Dashboard  from './pages/Dashboard';
 import ImportData from './pages/ImportData';
@@ -13,6 +14,7 @@ import Page3 from './pages/Page3';
 import Page4 from './pages/Page4';
 import Page5 from './pages/Page5';
 
+
 export default function App() {
   return (
     <PatientProvider>
@@ -21,6 +23,8 @@ export default function App() {
           {/* Point d'entrée → Créer compte / Connexion */}
           <Route path="/"          element={<Navigate to="/auth" replace />} />
           <Route path="/auth"      element={<AuthPage />} />
+
+          <Route path="/admin" element={<AdminDashboard />} />
 
           {/* Dashboard principal */}
           <Route path="/dashboard" element={<Dashboard />} />
