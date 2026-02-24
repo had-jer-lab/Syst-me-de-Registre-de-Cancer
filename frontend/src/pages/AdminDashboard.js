@@ -1,118 +1,97 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 
-// ─── Mock Data ───────────────────────────────────────────────────────────────
-const MOCK_PATIENTS = [
-  { id: 'DOS-2026-18321', nom: 'Benali', prenom: 'Mehdi', age: 24, organe: 'Cœur', stade: 'II', wilaya: 'Alger', medecin: 'Dr. Hamidi', date: '15/02/2026', status: 'Actif' },
-  { id: 'DOS-2026-17890', nom: 'Zerrouk', prenom: 'Fatima', age: 52, organe: 'Lymphome', stade: 'III', wilaya: 'Oran', medecin: 'Dr. Aouad', date: '12/02/2026', status: 'Suivi' },
-  { id: 'DOS-2026-17654', nom: 'Bensalem', prenom: 'Karim', age: 61, organe: 'Poumon', stade: 'IV', wilaya: 'Constantine', medecin: 'Dr. Benamra', date: '10/02/2026', status: 'Critique' },
-  { id: 'DOS-2026-17201', nom: 'Hamidi', prenom: 'Nadia', age: 38, organe: 'Col utérus', stade: 'I', wilaya: 'Tlemcen', medecin: 'Dr. Hamidi', date: '08/02/2026', status: 'Actif' },
-  { id: 'DOS-2026-16988', nom: 'Tlemcani', prenom: 'Omar', age: 70, organe: 'Prostate', stade: 'II', wilaya: 'Annaba', medecin: 'Dr. Meziane', date: '05/02/2026', status: 'Suivi' },
-  { id: 'DOS-2026-16500', nom: 'Amrani', prenom: 'Sara', age: 45, organe: 'Sein', stade: 'I', wilaya: 'Béjaïa', medecin: 'Dr. Aouad', date: '01/02/2026', status: 'Actif' },
-];
+// ─── API Helper ───────────────────────────────────────────────────────────────
+const API = 'http://localhost:8000/api/auth';
 
-const MOCK_USERS = [
-  { id: 'USR-001', nom: 'Hamidi', prenom: 'Kamel', email: 'k.hamidi@chu-alger.dz', role: 'Médecin', specialite: 'Oncologie médicale', wilaya: 'Alger', etablissement: 'CHU Mustapha', status: 'Actif', createdAt: '10/01/2026', lastLogin: '21/02/2026 09:14', loginCount: 142, permissions: ['read', 'write', 'rcp'] },
-  { id: 'USR-002', nom: 'Aouad', prenom: 'Fatima', email: 'f.aouad@chu-oran.dz', role: 'Médecin', specialite: 'Radiothérapie', wilaya: 'Oran', etablissement: 'CHU Oran', status: 'Actif', createdAt: '15/01/2026', lastLogin: '20/02/2026 16:42', loginCount: 98, permissions: ['read', 'write', 'rcp'] },
-  { id: 'USR-003', nom: 'Meziane', prenom: 'Sofiane', email: 's.meziane@ehu-oran.dz', role: 'Biologiste', specialite: 'Biologie médicale', wilaya: 'Annaba', etablissement: 'EHU Annaba', status: 'Actif', createdAt: '20/01/2026', lastLogin: '21/02/2026 08:05', loginCount: 67, permissions: ['read', 'lab'] },
-  { id: 'USR-004', nom: 'Benamra', prenom: 'Samir', email: 's.benamra@chu-const.dz', role: 'Médecin', specialite: 'Chirurgie oncologique', wilaya: 'Constantine', etablissement: 'CHU Constantine', status: 'Inactif', createdAt: '05/02/2026', lastLogin: '12/02/2026 11:20', loginCount: 23, permissions: ['read'] },
-  { id: 'USR-005', nom: 'Larbi', prenom: 'Amina', email: 'a.larbi@hca.dz', role: 'Biologiste', specialite: 'Anatomopathologie', wilaya: 'Tlemcen', etablissement: 'HCA Tlemcen', status: 'Actif', createdAt: '01/02/2026', lastLogin: '19/02/2026 14:30', loginCount: 45, permissions: ['read', 'lab', 'write'] },
-];
-
-const MOCK_LOGS = [
-  { user: 'Dr. Kamel Hamidi', action: 'Connexion', detail: 'Depuis 41.200.x.x', time: '21/02/2026 09:14', type: 'login' },
-  { user: 'Dr. Fatima Aouad', action: 'Déconnexion', detail: 'Session de 2h14', time: '20/02/2026 18:56', type: 'logout' },
-  { user: 'Dr. Sofiane Meziane', action: 'Connexion', detail: 'Depuis 41.111.x.x', time: '21/02/2026 08:05', type: 'login' },
-  { user: 'Dr. Kamel Hamidi', action: 'Création patient', detail: 'DOS-2026-18321', time: '21/02/2026 10:32', type: 'action' },
-  { user: 'Dr. Amina Larbi', action: 'Connexion', detail: 'Depuis mobile', time: '19/02/2026 14:30', type: 'login' },
-  { user: 'Dr. Samir Benamra', action: 'Déconnexion', detail: 'Session de 0h47', time: '12/02/2026 12:07', type: 'logout' },
-  { user: 'Dr. Fatima Aouad', action: 'Connexion', detail: 'Depuis 41.200.x.x', time: '20/02/2026 16:42', type: 'login' },
-  { user: 'Dr. Sofiane Meziane', action: 'Modification résultat', detail: 'Labo #4521', time: '21/02/2026 09:00', type: 'action' },
-];
-
-const STATUS_COLORS = {
-  'Actif':    { bg: 'rgba(0,201,167,0.12)',  color: '#00C9A7', border: 'rgba(0,201,167,0.25)' },
-  'Suivi':    { bg: 'rgba(74,108,247,0.1)',  color: '#4A6CF7', border: 'rgba(74,108,247,0.2)' },
-  'Critique': { bg: 'rgba(255,107,107,0.1)', color: '#FF6B6B', border: 'rgba(255,107,107,0.22)' },
-  'Inactif':  { bg: 'rgba(122,139,173,0.1)', color: '#7A8BAD', border: 'rgba(122,139,173,0.2)' },
-};
-
-const ROLE_COLORS = {
-  'Médecin':    { bg: 'rgba(74,108,247,0.1)',  color: '#4A6CF7' },
-  'Biologiste': { bg: 'rgba(0,201,167,0.12)',  color: '#00C9A7' },
-  'Admin':      { bg: 'rgba(155,89,182,0.12)', color: '#9B59B6' },
-};
-
-const ALL_PERMISSIONS = [
-  { key: 'read',  label: 'Lecture',     icon: '👁', desc: 'Consulter les dossiers patients' },
-  { key: 'write', label: 'Écriture',    icon: '✏', desc: 'Créer / modifier des dossiers' },
-  { key: 'rcp',   label: 'RCP',         icon: '💬', desc: 'Participer aux réunions RCP' },
-  { key: 'lab',   label: 'Laboratoire', icon: '🔬', desc: 'Accès aux données biologiques' },
-  { key: 'stats', label: 'Statistiques',icon: '📊', desc: 'Voir les tableaux de bord' },
-  { key: 'admin', label: 'Admin',        icon: '⚙', desc: 'Gérer utilisateurs et paramètres' },
-];
-
-// ─── Sub-pages ────────────────────────────────────────────────────────────────
-function PatientsPage({ search }) {
-  const filtered = MOCK_PATIENTS.filter(p =>
-    `${p.prenom} ${p.nom} ${p.id} ${p.organe} ${p.wilaya}`.toLowerCase().includes(search.toLowerCase())
-  );
-  return (
-    <div>
-      <div style={s.pageTitle}>Liste des patients <span style={s.pageTitleCount}>{filtered.length} patients</span></div>
-      <div style={s.tableWrap}>
-        <table style={s.table}>
-          <thead>
-            <tr style={s.thead}>
-              {['N° Dossier','Patient','Âge','Organe','Stade','Wilaya','Médecin référent','Date','Statut'].map(h => (
-                <th key={h} style={s.th}>{h}</th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {filtered.map((p, i) => (
-              <tr key={p.id} style={{ ...s.tr, background: i % 2 === 0 ? '#fff' : '#FAFBFF' }}>
-                <td style={s.td}><span style={s.dossierId}>{p.id}</span></td>
-                <td style={s.td}>
-                  <div style={s.patientCell}>
-                    <div style={s.patientAvatar}>{p.prenom[0]}{p.nom[0]}</div>
-                    <div>
-                      <div style={s.patientName}>{p.prenom} {p.nom}</div>
-                    </div>
-                  </div>
-                </td>
-                <td style={s.td}><span style={s.ageChip}>{p.age} ans</span></td>
-                <td style={s.td}>{p.organe}</td>
-                <td style={s.td}><span style={s.stadeChip}>Stade {p.stade}</span></td>
-                <td style={s.td}>{p.wilaya}</td>
-                <td style={s.td}><span style={{ fontSize: 13, color: '#4A6CF7', fontWeight: 700 }}>{p.medecin}</span></td>
-                <td style={s.td}>{p.date}</td>
-                <td style={s.td}>
-                  <span style={{ ...s.statusBadge, ...STATUS_COLORS[p.status] }}>{p.status}</span>
-                </td>
-              </tr>
-            ))}
-            {filtered.length === 0 && (
-              <tr><td colSpan={9} style={{ ...s.td, textAlign: 'center', color: '#7A8BAD', padding: 40 }}>Aucun résultat pour « {search} »</td></tr>
-            )}
-          </tbody>
-        </table>
-      </div>
-    </div>
-  );
+async function apiFetch(path, options = {}) {
+  const token = localStorage.getItem('access_token');
+  const res = await fetch(`${API}${path}`, {
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    ...options,
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw err;
+  }
+  return res.json();
 }
 
+// ─── Status / Role colors ─────────────────────────────────────────────────────
+const STATUS_COLORS = {
+  actif:    { bg: 'rgba(0,201,167,0.12)',  color: '#00C9A7', border: 'rgba(0,201,167,0.25)' },
+  inactif:  { bg: 'rgba(122,139,173,0.1)', color: '#7A8BAD', border: 'rgba(122,139,173,0.2)' },
+  suspendu: { bg: 'rgba(255,107,107,0.1)', color: '#FF6B6B', border: 'rgba(255,107,107,0.22)' },
+};
+const ROLE_COLORS = {
+  medecin:    { bg: 'rgba(74,108,247,0.1)',  color: '#4A6CF7' },
+  biologiste: { bg: 'rgba(0,201,167,0.12)',  color: '#00C9A7' },
+};
+const ALL_PERMISSIONS = [
+  { key: 'perm_read',   label: 'Lecture',      icon: '👁',  desc: 'Consulter les dossiers patients' },
+  { key: 'perm_write',  label: 'Écriture',     icon: '✏',  desc: 'Créer / modifier des dossiers' },
+  { key: 'perm_rcp',    label: 'RCP',          icon: '💬', desc: 'Participer aux réunions RCP' },
+  { key: 'perm_lab',    label: 'Laboratoire',  icon: '🔬', desc: 'Accès aux données biologiques' },
+  { key: 'perm_stats',  label: 'Statistiques', icon: '📊', desc: 'Voir les tableaux de bord' },
+  { key: 'perm_import', label: 'Import',       icon: '📥', desc: 'Importer des données CSV/Excel' },
+];
+
+// ─── User Modal ───────────────────────────────────────────────────────────────
 function UserModal({ user, onClose, onSave }) {
   const isNew = !user;
-  const [form, setForm] = useState(user || { nom: '', prenom: '', email: '', role: 'Médecin', specialite: '', wilaya: '', etablissement: '', status: 'Actif', permissions: ['read'] });
+  const [form, setForm] = useState(
+    user
+      ? { ...user, password: '', password2: '' }
+      : {
+          nom: '', prenom: '', email: '', role: 'medecin',
+          specialite: '', wilaya: '', etablissement: '',
+          statut: 'actif', telephone: '',
+          perm_read: true, perm_write: false, perm_rcp: false,
+          perm_lab: false, perm_stats: false, perm_import: false,
+          password: '', password2: '',
+        }
+  );
+  const [errors, setErrors] = useState({});
+  const [loading, setLoading] = useState(false);
 
-  const togglePerm = (key) => {
-    setForm(prev => ({
-      ...prev,
-      permissions: prev.permissions.includes(key)
-        ? prev.permissions.filter(p => p !== key)
-        : [...prev.permissions, key]
-    }));
+  const togglePerm = (key) => setForm(prev => ({ ...prev, [key]: !prev[key] }));
+
+  const validate = () => {
+    const e = {};
+    if (!form.nom.trim())    e.nom    = 'Obligatoire';
+    if (!form.prenom.trim()) e.prenom = 'Obligatoire';
+    if (!form.email.trim())  e.email  = 'Obligatoire';
+    if (isNew) {
+      if (!form.password)         e.password  = 'Le mot de passe est obligatoire';
+      else if (form.password.length < 8) e.password = 'Minimum 8 caractères';
+      if (form.password !== form.password2) e.password2 = 'Les mots de passe ne correspondent pas';
+    } else if (form.password && form.password !== form.password2) {
+      e.password2 = 'Les mots de passe ne correspondent pas';
+    }
+    setErrors(e);
+    return Object.keys(e).length === 0;
+  };
+
+  const handleSubmit = async () => {
+    if (!validate()) return;
+    setLoading(true);
+    const payload = { ...form };
+    delete payload.password2;
+    if (!payload.password) delete payload.password; // don't send empty password on edit
+    try {
+      await onSave(payload);
+    } catch (err) {
+      const apiErrors = {};
+      if (err.email) apiErrors.email = err.email[0];
+      if (err.password) apiErrors.password = err.password[0];
+      if (err.non_field_errors) apiErrors.general = err.non_field_errors[0];
+      setErrors(apiErrors);
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -127,22 +106,65 @@ function UserModal({ user, onClose, onSave }) {
         </div>
 
         <div style={s.modalBody}>
+          {errors.general && (
+            <div style={s.errBanner}>⚠ {errors.general}</div>
+          )}
+
           {/* Identité */}
           <div style={s.modalSection}>
             <div style={s.modalSectionLabel}>Identité</div>
             <div style={s.modalGrid2}>
               <div style={s.mfg}>
-                <label style={s.ml}>Nom</label>
-                <input style={s.mi} value={form.nom} onChange={e => setForm({ ...form, nom: e.target.value })} placeholder="Nom de famille" />
+                <label style={s.ml}>Nom *</label>
+                <input style={{ ...s.mi, ...(errors.nom ? s.miErr : {}) }}
+                  value={form.nom} onChange={e => setForm({ ...form, nom: e.target.value })} placeholder="Nom de famille" />
+                {errors.nom && <span style={s.errTxt}>{errors.nom}</span>}
               </div>
               <div style={s.mfg}>
-                <label style={s.ml}>Prénom</label>
-                <input style={s.mi} value={form.prenom} onChange={e => setForm({ ...form, prenom: e.target.value })} placeholder="Prénom" />
+                <label style={s.ml}>Prénom *</label>
+                <input style={{ ...s.mi, ...(errors.prenom ? s.miErr : {}) }}
+                  value={form.prenom} onChange={e => setForm({ ...form, prenom: e.target.value })} placeholder="Prénom" />
+                {errors.prenom && <span style={s.errTxt}>{errors.prenom}</span>}
               </div>
             </div>
             <div style={s.mfg}>
-              <label style={s.ml}>Email professionnel</label>
-              <input style={s.mi} type="email" value={form.email} onChange={e => setForm({ ...form, email: e.target.value })} placeholder="exemple@hopital.dz" />
+              <label style={s.ml}>Email professionnel *</label>
+              <input style={{ ...s.mi, ...(errors.email ? s.miErr : {}) }}
+                type="email" value={form.email}
+                onChange={e => setForm({ ...form, email: e.target.value })}
+                placeholder="exemple@hopital.dz" />
+              {errors.email && <span style={s.errTxt}>{errors.email}</span>}
+            </div>
+            <div style={{ ...s.mfg, marginTop: 12 }}>
+              <label style={s.ml}>Téléphone</label>
+              <input style={s.mi} value={form.telephone}
+                onChange={e => setForm({ ...form, telephone: e.target.value })}
+                placeholder="0770 123 456" />
+            </div>
+          </div>
+
+          {/* Mot de passe */}
+          <div style={s.modalSection}>
+            <div style={s.modalSectionLabel}>
+              {isNew ? 'Mot de passe *' : 'Changer le mot de passe (optionnel)'}
+            </div>
+            <div style={s.modalGrid2}>
+              <div style={s.mfg}>
+                <label style={s.ml}>{isNew ? 'Mot de passe *' : 'Nouveau mot de passe'}</label>
+                <input style={{ ...s.mi, ...(errors.password ? s.miErr : {}) }}
+                  type="password" value={form.password}
+                  onChange={e => setForm({ ...form, password: e.target.value })}
+                  placeholder={isNew ? 'Minimum 8 caractères' : 'Laisser vide pour ne pas changer'} />
+                {errors.password && <span style={s.errTxt}>{errors.password}</span>}
+              </div>
+              <div style={s.mfg}>
+                <label style={s.ml}>Confirmer *</label>
+                <input style={{ ...s.mi, ...(errors.password2 ? s.miErr : {}) }}
+                  type="password" value={form.password2}
+                  onChange={e => setForm({ ...form, password2: e.target.value })}
+                  placeholder="Répéter le mot de passe" />
+                {errors.password2 && <span style={s.errTxt}>{errors.password2}</span>}
+              </div>
             </div>
           </div>
 
@@ -153,33 +175,36 @@ function UserModal({ user, onClose, onSave }) {
               <div style={s.mfg}>
                 <label style={s.ml}>Rôle</label>
                 <select style={s.mi} value={form.role} onChange={e => setForm({ ...form, role: e.target.value })}>
-                  <option>Médecin</option>
-                  <option>Biologiste</option>
+                  <option value="medecin">Médecin</option>
+                  <option value="biologiste">Biologiste</option>
                 </select>
               </div>
               <div style={s.mfg}>
                 <label style={s.ml}>Spécialité</label>
-                <input style={s.mi} value={form.specialite} onChange={e => setForm({ ...form, specialite: e.target.value })} placeholder="ex: Oncologie" />
+                <input style={s.mi} value={form.specialite}
+                  onChange={e => setForm({ ...form, specialite: e.target.value })} placeholder="ex: Oncologie" />
               </div>
             </div>
             <div style={s.modalGrid2}>
               <div style={s.mfg}>
                 <label style={s.ml}>Wilaya</label>
-                <input style={s.mi} value={form.wilaya} onChange={e => setForm({ ...form, wilaya: e.target.value })} placeholder="Wilaya" />
+                <input style={s.mi} value={form.wilaya}
+                  onChange={e => setForm({ ...form, wilaya: e.target.value })} placeholder="Wilaya" />
               </div>
               <div style={s.mfg}>
                 <label style={s.ml}>Établissement</label>
-                <input style={s.mi} value={form.etablissement} onChange={e => setForm({ ...form, etablissement: e.target.value })} placeholder="CHU / EHU…" />
+                <input style={s.mi} value={form.etablissement}
+                  onChange={e => setForm({ ...form, etablissement: e.target.value })} placeholder="CHU / EHU…" />
               </div>
             </div>
-            <div style={s.mfg}>
+            <div style={{ ...s.mfg, marginTop: 12 }}>
               <label style={s.ml}>Statut du compte</label>
               <div style={{ display: 'flex', gap: 10, marginTop: 4 }}>
-                {['Actif', 'Inactif', 'Suspendu'].map(st => (
+                {['actif', 'inactif', 'suspendu'].map(st => (
                   <button key={st} type="button"
-                    style={{ ...s.statusToggle, ...(form.status === st ? s.statusToggleActive : {}) }}
-                    onClick={() => setForm({ ...form, status: st })}>
-                    {st}
+                    style={{ ...s.statusToggle, ...(form.statut === st ? s.statusToggleActive : {}) }}
+                    onClick={() => setForm({ ...form, statut: st })}>
+                    {st.charAt(0).toUpperCase() + st.slice(1)}
                   </button>
                 ))}
               </div>
@@ -191,16 +216,15 @@ function UserModal({ user, onClose, onSave }) {
             <div style={s.modalSectionLabel}>Permissions d'accès</div>
             <div style={s.permGrid}>
               {ALL_PERMISSIONS.map(({ key, label, icon, desc }) => {
-                const active = form.permissions.includes(key);
+                const active = !!form[key];
                 return (
-                  <div key={key} style={{ ...s.permCard, ...(active ? s.permCardActive : {}) }}
+                  <div key={key}
+                    style={{ ...s.permCard, ...(active ? s.permCardActive : {}) }}
                     onClick={() => togglePerm(key)}>
                     <div style={s.permIcon}>{icon}</div>
                     <div style={s.permLabel}>{label}</div>
                     <div style={s.permDesc}>{desc}</div>
-                    <div style={{ ...s.permCheck, ...(active ? s.permCheckActive : {}) }}>
-                      {active ? '✓' : ''}
-                    </div>
+                    <div style={{ ...s.permCheck, ...(active ? s.permCheckActive : {}) }}>{active ? '✓' : ''}</div>
                   </div>
                 );
               })}
@@ -209,9 +233,9 @@ function UserModal({ user, onClose, onSave }) {
         </div>
 
         <div style={s.modalFooter}>
-          <button style={s.btnGhost} onClick={onClose}>Annuler</button>
-          <button style={s.btnPrimary} onClick={() => onSave(form)}>
-            {isNew ? '✓ Créer l\'utilisateur' : '✓ Enregistrer'}
+          <button style={s.btnGhost} onClick={onClose} disabled={loading}>Annuler</button>
+          <button style={{ ...s.btnPrimary, opacity: loading ? 0.7 : 1 }} onClick={handleSubmit} disabled={loading}>
+            {loading ? '⏳ Chargement…' : isNew ? '✓ Créer l\'utilisateur' : '✓ Enregistrer'}
           </button>
         </div>
       </div>
@@ -219,44 +243,76 @@ function UserModal({ user, onClose, onSave }) {
   );
 }
 
+// ─── Users Page ───────────────────────────────────────────────────────────────
 function UsersPage({ search }) {
-  const [users, setUsers] = useState(MOCK_USERS);
+  const [users, setUsers] = useState([]);
+  const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [editUser, setEditUser] = useState(null);
-  const [toast, setToast] = useState('');
+  const [toast, setToast] = useState({ msg: '', type: 'success' });
 
-  const filtered = users.filter(u =>
-    `${u.prenom} ${u.nom} ${u.email} ${u.role} ${u.wilaya} ${u.etablissement}`.toLowerCase().includes(search.toLowerCase())
-  );
+  const loadUsers = useCallback(async () => {
+    setLoading(true);
+    try {
+      const data = await apiFetch('/users/');
+      setUsers(Array.isArray(data) ? data : (data.results || []));
+    } catch {
+      showToast('Erreur lors du chargement des utilisateurs', 'error');
+    } finally {
+      setLoading(false);
+    }
+  }, []);
 
-  const showToast = (msg) => {
-    setToast(msg);
-    setTimeout(() => setToast(''), 3000);
+  useEffect(() => { loadUsers(); }, [loadUsers]);
+
+  const showToast = (msg, type = 'success') => {
+    setToast({ msg, type });
+    setTimeout(() => setToast({ msg: '', type: 'success' }), 3500);
   };
 
-  const handleSave = (form) => {
+  const handleSave = async (formData) => {
     if (editUser) {
-      setUsers(prev => prev.map(u => u.id === editUser.id ? { ...u, ...form } : u));
-      showToast(`✓ Utilisateur ${form.prenom} ${form.nom} modifié`);
+      const updated = await apiFetch(`/users/${editUser.id}/`, {
+        method: 'PATCH',
+        body: JSON.stringify(formData),
+      });
+      setUsers(prev => prev.map(u => u.id === editUser.id ? updated : u));
+      showToast(`✓ Utilisateur ${formData.prenom} ${formData.nom} modifié`);
     } else {
-      const newUser = { ...form, id: 'USR-' + String(users.length + 1).padStart(3, '0'), createdAt: new Date().toLocaleDateString('fr-FR'), lastLogin: '—', loginCount: 0 };
-      setUsers(prev => [...prev, newUser]);
-      showToast(`✓ Utilisateur ${form.prenom} ${form.nom} créé`);
+      const created = await apiFetch('/users/', {
+        method: 'POST',
+        body: JSON.stringify(formData),
+      });
+      setUsers(prev => [created, ...prev]);
+      showToast(`✓ Compte créé — ${formData.prenom} ${formData.nom} peut maintenant se connecter`);
     }
     setShowModal(false);
     setEditUser(null);
   };
 
-  const handleDelete = (id, name) => {
-    if (window.confirm(`Supprimer ${name} ?`)) {
+  const handleDelete = async (id, name) => {
+    if (!window.confirm(`Supprimer le compte de ${name} ?`)) return;
+    try {
+      await apiFetch(`/users/${id}/`, { method: 'DELETE' });
       setUsers(prev => prev.filter(u => u.id !== id));
-      showToast(`✓ Utilisateur supprimé`);
+      showToast(`✓ Compte supprimé`);
+    } catch {
+      showToast('Erreur lors de la suppression', 'error');
     }
   };
 
+  const filtered = users.filter(u =>
+    `${u.prenom} ${u.nom} ${u.email} ${u.role} ${u.wilaya} ${u.etablissement}`
+      .toLowerCase().includes(search.toLowerCase())
+  );
+
   return (
     <div>
-      {toast && <div style={s.toast}>{toast}</div>}
+      {toast.msg && (
+        <div style={{ ...s.toast, background: toast.type === 'error' ? 'linear-gradient(135deg,#FF6B6B,#e74c3c)' : 'linear-gradient(135deg,#00C9A7,#00a98b)' }}>
+          {toast.msg}
+        </div>
+      )}
       {(showModal || editUser) && (
         <UserModal
           user={editUser}
@@ -264,138 +320,239 @@ function UsersPage({ search }) {
           onSave={handleSave}
         />
       )}
+
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
-        <div style={s.pageTitle}>Gestion des utilisateurs <span style={s.pageTitleCount}>{filtered.length} comptes</span></div>
+        <div style={s.pageTitle}>
+          Mes utilisateurs
+          <span style={s.pageTitleCount}>{filtered.length} compte{filtered.length !== 1 ? 's' : ''}</span>
+        </div>
         <button style={s.btnPrimary} onClick={() => setShowModal(true)}>➕ Nouvel utilisateur</button>
       </div>
 
-      <div style={s.tableWrap}>
-        <table style={s.table}>
-          <thead>
-            <tr style={s.thead}>
-              {['Utilisateur','Rôle','Spécialité','Établissement','Permissions','Dernière connexion','Statut','Actions'].map(h => (
-                <th key={h} style={s.th}>{h}</th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {filtered.map((u, i) => (
-              <tr key={u.id} style={{ ...s.tr, background: i % 2 === 0 ? '#fff' : '#FAFBFF' }}>
-                <td style={s.td}>
-                  <div style={s.patientCell}>
-                    <div style={{ ...s.patientAvatar, background: ROLE_COLORS[u.role]?.bg || '#eee', color: ROLE_COLORS[u.role]?.color || '#555' }}>
-                      {u.prenom[0]}{u.nom[0]}
-                    </div>
-                    <div>
-                      <div style={s.patientName}>{u.prenom} {u.nom}</div>
-                      <div style={{ fontSize: 11, color: '#7A8BAD', fontWeight: 600 }}>{u.email}</div>
-                    </div>
-                  </div>
-                </td>
-                <td style={s.td}>
-                  <span style={{ ...s.roleChip, ...ROLE_COLORS[u.role] }}>{u.role}</span>
-                </td>
-                <td style={s.td}><span style={{ fontSize: 13, color: '#4A5568' }}>{u.specialite}</span></td>
-                <td style={s.td}>
-                  <div style={{ fontSize: 12, color: '#4A6CF7', fontWeight: 700 }}>{u.etablissement}</div>
-                  <div style={{ fontSize: 11, color: '#7A8BAD' }}>{u.wilaya}</div>
-                </td>
-                <td style={s.td}>
-                  <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
-                    {u.permissions.map(p => {
-                      const pm = ALL_PERMISSIONS.find(x => x.key === p);
-                      return pm ? (
-                        <span key={p} style={s.permBadge} title={pm.desc}>{pm.icon} {pm.label}</span>
-                      ) : null;
-                    })}
-                  </div>
-                </td>
-                <td style={s.td}>
-                  <div style={{ fontSize: 13, color: '#1A2B4A', fontWeight: 700 }}>{u.lastLogin}</div>
-                  <div style={{ fontSize: 11, color: '#7A8BAD' }}>{u.loginCount} connexions</div>
-                </td>
-                <td style={s.td}>
-                  <span style={{ ...s.statusBadge, ...STATUS_COLORS[u.status] }}>{u.status}</span>
-                </td>
-                <td style={s.td}>
-                  <div style={s.actionBtns}>
-                    <button style={s.iconBtnBlue} title="Modifier" onClick={() => setEditUser(u)}>✏</button>
-                    <button style={{ ...s.iconBtnBlue, color: '#FF6B6B', borderColor: 'rgba(255,107,107,0.3)' }} title="Supprimer" onClick={() => handleDelete(u.id, `${u.prenom} ${u.nom}`)}>🗑</button>
-                  </div>
-                </td>
+      {loading ? (
+        <div style={{ textAlign: 'center', padding: 60, color: '#7A8BAD' }}>
+          <div style={{ fontSize: 32, marginBottom: 12 }}>⏳</div>
+          Chargement des utilisateurs…
+        </div>
+      ) : (
+        <div style={s.tableWrap}>
+          <table style={s.table}>
+            <thead>
+              <tr style={s.thead}>
+                {['Utilisateur', 'Rôle', 'Spécialité', 'Établissement', 'Permissions', 'Statut', 'Créé le', 'Actions'].map(h => (
+                  <th key={h} style={s.th}>{h}</th>
+                ))}
               </tr>
-            ))}
-            {filtered.length === 0 && (
-              <tr><td colSpan={8} style={{ ...s.td, textAlign: 'center', color: '#7A8BAD', padding: 40 }}>Aucun utilisateur trouvé</td></tr>
-            )}
-          </tbody>
-        </table>
-      </div>
+            </thead>
+            <tbody>
+              {filtered.map((u, i) => (
+                <tr key={u.id} style={{ ...s.tr, background: i % 2 === 0 ? '#fff' : '#FAFBFF' }}>
+                  <td style={s.td}>
+                    <div style={s.patientCell}>
+                      <div style={{
+                        ...s.patientAvatar,
+                        background: ROLE_COLORS[u.role]?.bg || '#eee',
+                        color: ROLE_COLORS[u.role]?.color || '#555'
+                      }}>
+                        {(u.prenom?.[0] || '?')}{(u.nom?.[0] || '?')}
+                      </div>
+                      <div>
+                        <div style={s.patientName}>{u.prenom} {u.nom}</div>
+                        <div style={{ fontSize: 11, color: '#7A8BAD', fontWeight: 600 }}>{u.email}</div>
+                      </div>
+                    </div>
+                  </td>
+                  <td style={s.td}>
+                    <span style={{ ...s.roleChip, ...ROLE_COLORS[u.role] }}>
+                      {u.role === 'medecin' ? 'Médecin' : 'Biologiste'}
+                    </span>
+                  </td>
+                  <td style={s.td}><span style={{ fontSize: 13, color: '#4A5568' }}>{u.specialite || '—'}</span></td>
+                  <td style={s.td}>
+                    <div style={{ fontSize: 12, color: '#4A6CF7', fontWeight: 700 }}>{u.etablissement || '—'}</div>
+                    <div style={{ fontSize: 11, color: '#7A8BAD' }}>{u.wilaya || '—'}</div>
+                  </td>
+                  <td style={s.td}>
+                    <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+                      {ALL_PERMISSIONS.filter(p => u[p.key]).map(p => (
+                        <span key={p.key} style={s.permBadge} title={p.desc}>{p.icon} {p.label}</span>
+                      ))}
+                    </div>
+                  </td>
+                  <td style={s.td}>
+                    <span style={{ ...s.statusBadge, ...(STATUS_COLORS[u.statut] || STATUS_COLORS.inactif) }}>
+                      {u.statut?.charAt(0).toUpperCase() + u.statut?.slice(1)}
+                    </span>
+                  </td>
+                  <td style={s.td}>
+                    <span style={{ fontSize: 12, color: '#7A8BAD', fontWeight: 600 }}>
+                      {u.created_at ? new Date(u.created_at).toLocaleDateString('fr-FR') : '—'}
+                    </span>
+                  </td>
+                  <td style={s.td}>
+                    <div style={s.actionBtns}>
+                      <button style={s.iconBtnBlue} title="Modifier" onClick={() => setEditUser(u)}>✏</button>
+                      <button style={{ ...s.iconBtnBlue, color: '#FF6B6B', borderColor: 'rgba(255,107,107,0.3)' }}
+                        title="Supprimer" onClick={() => handleDelete(u.id, `${u.prenom} ${u.nom}`)}>🗑</button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+              {filtered.length === 0 && !loading && (
+                <tr>
+                  <td colSpan={8} style={{ ...s.td, textAlign: 'center', color: '#7A8BAD', padding: 50 }}>
+                    <div style={{ fontSize: 36, marginBottom: 12 }}>👤</div>
+                    <div style={{ fontWeight: 700 }}>Aucun utilisateur créé</div>
+                    <div style={{ fontSize: 12, marginTop: 4 }}>Cliquez sur « Nouvel utilisateur » pour commencer</div>
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      )}
     </div>
   );
 }
 
+// ─── Logs Page ────────────────────────────────────────────────────────────────
 function LogsPage({ search }) {
+  const [logs, setLogs] = useState([]);
+  const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState('all');
-  const filtered = MOCK_LOGS
-    .filter(l => (filter === 'all' || l.type === filter))
-    .filter(l => `${l.user} ${l.action} ${l.detail}`.toLowerCase().includes(search.toLowerCase()));
 
-  const logStyle = (type) => ({
+  useEffect(() => {
+    apiFetch('/logs/')
+      .then(data => setLogs(Array.isArray(data) ? data : (data.results || [])))
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, []);
+
+  const filtered = logs
+    .filter(l => filter === 'all' || l.action === filter)
+    .filter(l => `${l.user_name} ${l.action} ${l.detail}`.toLowerCase().includes(search.toLowerCase()));
+
+  const logStyle = (action) => ({
     login:  { bg: 'rgba(0,201,167,0.1)',  color: '#00C9A7', icon: '🔑' },
     logout: { bg: 'rgba(74,108,247,0.1)', color: '#4A6CF7', icon: '🚪' },
-    action: { bg: 'rgba(255,162,107,0.1)',color: '#FFA26B', icon: '⚡' },
-  }[type] || {});
+    action: { bg: 'rgba(255,162,107,0.1)', color: '#FFA26B', icon: '⚡' },
+  }[action] || { bg: '#eee', color: '#666', icon: '•' });
 
   return (
     <div>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
-        <div style={s.pageTitle}>Journal de connexions <span style={s.pageTitleCount}>{filtered.length} événements</span></div>
+        <div style={s.pageTitle}>
+          Journal d'activité
+          <span style={s.pageTitleCount}>{filtered.length} événements</span>
+        </div>
         <div style={{ display: 'flex', gap: 8 }}>
-          {[['all','Tout'], ['login','Connexions'], ['logout','Déconnexions'], ['action','Actions']].map(([val, label]) => (
-            <button key={val} style={{ ...s.filterBtn, ...(filter === val ? s.filterBtnActive : {}) }} onClick={() => setFilter(val)}>{label}</button>
+          {[['all', 'Tout'], ['login', 'Connexions'], ['logout', 'Déconnexions'], ['action', 'Actions']].map(([val, label]) => (
+            <button key={val}
+              style={{ ...s.filterBtn, ...(filter === val ? s.filterBtnActive : {}) }}
+              onClick={() => setFilter(val)}>{label}</button>
           ))}
         </div>
       </div>
-
-      <div style={s.tableWrap}>
-        <table style={s.table}>
-          <thead>
-            <tr style={s.thead}>
-              {['Utilisateur','Type','Action','Détail','Horodatage'].map(h => (
-                <th key={h} style={s.th}>{h}</th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {filtered.map((l, i) => {
-              const ls = logStyle(l.type);
-              return (
-                <tr key={i} style={{ ...s.tr, background: i % 2 === 0 ? '#fff' : '#FAFBFF' }}>
-                  <td style={s.td}>
-                    <div style={s.patientCell}>
-                      <div style={{ ...s.patientAvatar, background: ls.bg, color: ls.color, fontSize: 14 }}>{ls.icon}</div>
-                      <span style={s.patientName}>{l.user}</span>
-                    </div>
-                  </td>
-                  <td style={s.td}>
-                    <span style={{ padding: '4px 12px', borderRadius: 30, fontSize: 12, fontWeight: 800, background: ls.bg, color: ls.color }}>
-                      {ls.icon} {l.type === 'login' ? 'Connexion' : l.type === 'logout' ? 'Déconnexion' : 'Action'}
-                    </span>
-                  </td>
-                  <td style={s.td}><span style={{ fontWeight: 700, color: '#1A2B4A', fontSize: 13 }}>{l.action}</span></td>
-                  <td style={s.td}><span style={{ fontSize: 12, color: '#7A8BAD', fontWeight: 600 }}>{l.detail}</span></td>
-                  <td style={s.td}><span style={{ fontFamily: "'Poppins', sans-serif", fontSize: 12, fontWeight: 700, color: '#4A6CF7' }}>{l.time}</span></td>
-                </tr>
-              );
-            })}
-            {filtered.length === 0 && (
-              <tr><td colSpan={5} style={{ ...s.td, textAlign: 'center', color: '#7A8BAD', padding: 40 }}>Aucun journal trouvé</td></tr>
-            )}
-          </tbody>
-        </table>
-      </div>
+      {loading ? (
+        <div style={{ textAlign: 'center', padding: 60, color: '#7A8BAD' }}>⏳ Chargement…</div>
+      ) : (
+        <div style={s.tableWrap}>
+          <table style={s.table}>
+            <thead>
+              <tr style={s.thead}>
+                {['Utilisateur', 'Type', 'Action', 'Détail', 'Horodatage'].map(h => (
+                  <th key={h} style={s.th}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {filtered.map((l, i) => {
+                const ls = logStyle(l.action);
+                return (
+                  <tr key={l.id} style={{ ...s.tr, background: i % 2 === 0 ? '#fff' : '#FAFBFF' }}>
+                    <td style={s.td}>
+                      <div style={s.patientCell}>
+                        <div style={{ ...s.patientAvatar, background: ls.bg, color: ls.color, fontSize: 14 }}>{ls.icon}</div>
+                        <span style={s.patientName}>{l.user_name}</span>
+                      </div>
+                    </td>
+                    <td style={s.td}>
+                      <span style={{ padding: '4px 12px', borderRadius: 30, fontSize: 12, fontWeight: 800, background: ls.bg, color: ls.color }}>
+                        {ls.icon} {l.action === 'login' ? 'Connexion' : l.action === 'logout' ? 'Déconnexion' : 'Action'}
+                      </span>
+                    </td>
+                    <td style={s.td}><span style={{ fontWeight: 700, color: '#1A2B4A', fontSize: 13 }}>{l.action}</span></td>
+                    <td style={s.td}><span style={{ fontSize: 12, color: '#7A8BAD', fontWeight: 600 }}>{l.detail || '—'}</span></td>
+                    <td style={s.td}>
+                      <span style={{ fontFamily: "'Poppins', sans-serif", fontSize: 12, fontWeight: 700, color: '#4A6CF7' }}>
+                        {new Date(l.timestamp).toLocaleString('fr-FR')}
+                      </span>
+                    </td>
+                  </tr>
+                );
+              })}
+              {filtered.length === 0 && (
+                <tr><td colSpan={5} style={{ ...s.td, textAlign: 'center', color: '#7A8BAD', padding: 40 }}>Aucun journal trouvé</td></tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      )}
     </div>
+  );
+}
+
+// ─── Overview Page ────────────────────────────────────────────────────────────
+function OverviewPage({ usersCount, logsCount, setPage }) {
+  return (
+    <>
+      <div style={s.statsGrid}>
+        {[
+          { label: 'Mes utilisateurs', value: String(usersCount), delta: 'médecins & biologistes', icon: '👥', color: '#4A6CF7' },
+          { label: 'Activités enregistrées', value: String(logsCount), delta: 'dans le journal', icon: '📋', color: '#00C9A7' },
+          { label: 'Statut système', value: 'En ligne', delta: 'Backend connecté', icon: '✅', color: '#9B59B6' },
+        ].map(({ label, value, delta, icon, color }) => (
+          <div key={label} style={s.statCard}>
+            <div style={{ ...s.statIcon, background: color + '18', color }}>{icon}</div>
+            <div style={s.statInfo}>
+              <div style={s.statValue}>{value}</div>
+              <div style={s.statLabel}>{label}</div>
+              <div style={{ ...s.statDelta, color }}>{delta}</div>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <div style={s.sectionHeader}>
+        <div style={s.sectionTitle}>Navigation rapide</div>
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2,1fr)', gap: 16, marginBottom: 32 }}>
+        {[
+          { id: 'users', icon: '👤', label: 'Gérer mes utilisateurs', sub: 'Créer des comptes médecins & biologistes', color: 'linear-gradient(135deg,#4A6CF7,#6B87FF)' },
+          { id: 'logs',  icon: '📋', label: 'Journal d\'activité',     sub: 'Connexions & actions des utilisateurs',  color: 'linear-gradient(135deg,#9B59B6,#8e44ad)' },
+        ].map(({ id, icon, label, sub, color }) => (
+          <div key={id} style={s.quickCard} onClick={() => setPage(id)}>
+            <div style={{ ...s.quickIcon, background: color }}>{icon}</div>
+            <div style={s.quickLabel}>{label}</div>
+            <div style={s.quickSub}>{sub}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* Info box */}
+      <div style={s.infoBanner}>
+        <div style={{ fontSize: 22, marginBottom: 10 }}>💡</div>
+        <div style={{ fontFamily: "'Poppins', sans-serif", fontWeight: 700, fontSize: 14, marginBottom: 6 }}>
+          Comment ça marche ?
+        </div>
+        <div style={{ fontSize: 13, color: '#7A8BAD', lineHeight: 1.6 }}>
+          1. Créez un compte pour chaque médecin ou biologiste via <strong>« Gérer mes utilisateurs »</strong><br />
+          2. Définissez un <strong>email</strong> et un <strong>mot de passe</strong> sécurisé<br />
+          3. Assignez les <strong>permissions</strong> adaptées à leur rôle<br />
+          4. L'utilisateur peut maintenant se connecter avec ses identifiants
+        </div>
+      </div>
+    </>
   );
 }
 
@@ -404,20 +561,27 @@ export default function AdminDashboard() {
   const navigate = useNavigate();
   const [page, setPage] = useState('overview');
   const [search, setSearch] = useState('');
+  const [usersCount, setUsersCount] = useState(0);
+  const [logsCount, setLogsCount] = useState(0);
 
-  const stats = [
-    { label: 'Total patients', value: '1 284', delta: '+12 ce mois', icon: '👥', color: '#4A6CF7' },
-    { label: 'Médecins actifs', value: String(MOCK_USERS.filter(u => u.role === 'Médecin' && u.status === 'Actif').length), delta: `/${MOCK_USERS.filter(u => u.role === 'Médecin').length} total`, icon: '🩺', color: '#00C9A7' },
-    { label: 'Biologistes', value: String(MOCK_USERS.filter(u => u.role === 'Biologiste').length), delta: 'actifs sur la plateforme', icon: '🔬', color: '#FFA26B' },
-    { label: 'Connexions aujourd\'hui', value: '23', delta: '↑ 8 vs hier', icon: '🔑', color: '#9B59B6' },
-  ];
+  // Load counts for overview
+  useEffect(() => {
+    apiFetch('/users/').then(d => setUsersCount((Array.isArray(d) ? d : d.results || []).length)).catch(() => {});
+    apiFetch('/logs/').then(d => setLogsCount((Array.isArray(d) ? d : d.results || []).length)).catch(() => {});
+  }, []);
 
   const navItems = [
-    { id: 'overview',  icon: '🏠', label: 'Vue d\'ensemble' },
-    { id: 'patients',  icon: '👥', label: 'Patients' },
-    { id: 'users',     icon: '👤', label: 'Utilisateurs' },
-    { id: 'logs',      icon: '📋', label: 'Journal' },
+    { id: 'overview', icon: '🏠', label: 'Vue d\'ensemble' },
+    { id: 'users',    icon: '👤', label: 'Mes utilisateurs' },
+    { id: 'logs',     icon: '📋', label: 'Journal' },
   ];
+
+  const handleLogout = () => {
+    localStorage.removeItem('access_token');
+    localStorage.removeItem('refresh_token');
+    localStorage.removeItem('user');
+    navigate('/auth');
+  };
 
   return (
     <div style={s.root}>
@@ -433,7 +597,9 @@ export default function AdminDashboard() {
 
         <nav style={s.nav}>
           {navItems.map(({ id, icon, label }) => (
-            <button key={id} style={{ ...s.navItem, ...(page === id ? s.navActive : {}) }} onClick={() => { setPage(id); setSearch(''); }}>
+            <button key={id}
+              style={{ ...s.navItem, ...(page === id ? s.navActive : {}) }}
+              onClick={() => { setPage(id); setSearch(''); }}>
               <span style={s.navIcon}>{icon}</span>
               <span>{label}</span>
             </button>
@@ -441,7 +607,7 @@ export default function AdminDashboard() {
         </nav>
 
         <div style={s.sidebarBottom}>
-          <div style={s.adminBadge}>⚙ Admin</div>
+          <div style={s.adminBadge}>⚙ Administrateur</div>
           <div style={s.userCard}>
             <div style={s.userAvatar}>AD</div>
             <div>
@@ -449,7 +615,7 @@ export default function AdminDashboard() {
               <div style={s.userRole}>Registre National</div>
             </div>
           </div>
-          <button style={s.logoutBtn} onClick={() => navigate('/auth')}>⬅ Déconnexion</button>
+          <button style={s.logoutBtn} onClick={handleLogout}>⬅ Déconnexion</button>
         </div>
       </div>
 
@@ -460,7 +626,6 @@ export default function AdminDashboard() {
           <div>
             <div style={s.topbarTitle}>
               {page === 'overview' && 'Tableau de bord Admin'}
-              {page === 'patients' && 'Liste des patients'}
               {page === 'users'    && 'Gestion des utilisateurs'}
               {page === 'logs'     && 'Journal d\'activité'}
             </div>
@@ -470,85 +635,16 @@ export default function AdminDashboard() {
             {page !== 'overview' && (
               <div style={s.searchWrap}>
                 <span style={s.searchIcon}>🔍</span>
-                <input style={s.searchInput} type="text" placeholder="Rechercher…" value={search} onChange={e => setSearch(e.target.value)} />
+                <input style={s.searchInput} type="text"
+                  placeholder="Rechercher…" value={search}
+                  onChange={e => setSearch(e.target.value)} />
               </div>
             )}
-            <button style={s.notifBtn}>🔔</button>
             <div style={s.avatar}>AD</div>
           </div>
         </div>
 
-        {/* ── OVERVIEW ── */}
-        {page === 'overview' && (
-          <>
-            <div style={s.statsGrid}>
-              {stats.map(({ label, value, delta, icon, color }) => (
-                <div key={label} style={s.statCard}>
-                  <div style={{ ...s.statIcon, background: color + '18', color }}>{icon}</div>
-                  <div style={s.statInfo}>
-                    <div style={s.statValue}>{value}</div>
-                    <div style={s.statLabel}>{label}</div>
-                    <div style={{ ...s.statDelta, color }}>{delta}</div>
-                  </div>
-                </div>
-              ))}
-            </div>
-
-            {/* Quick navigation cards */}
-            <div style={s.sectionHeader}>
-              <div style={s.sectionTitle}>Navigation rapide</div>
-            </div>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 16, marginBottom: 32 }}>
-              {[
-                { id: 'patients', icon: '👥', label: 'Patients', sub: 'Voir tous les dossiers', color: 'linear-gradient(135deg,#4A6CF7,#6B87FF)', count: '1 284 patients' },
-                { id: 'users',    icon: '👤', label: 'Utilisateurs', sub: 'Gérer médecins & biologistes', color: 'linear-gradient(135deg,#00C9A7,#00a98b)', count: `${MOCK_USERS.length} comptes` },
-                { id: 'logs',     icon: '📋', label: 'Journal', sub: 'Connexions & activités', color: 'linear-gradient(135deg,#9B59B6,#8e44ad)', count: '23 événements aujourd\'hui' },
-              ].map(({ id, icon, label, sub, color, count }) => (
-                <div key={id} style={s.quickCard} onClick={() => setPage(id)}>
-                  <div style={{ ...s.quickIcon, background: color }}>{icon}</div>
-                  <div style={s.quickLabel}>{label}</div>
-                  <div style={s.quickSub}>{sub}</div>
-                  <div style={s.quickCount}>{count}</div>
-                </div>
-              ))}
-            </div>
-
-            {/* Recent users */}
-            <div style={s.sectionHeader}>
-              <div style={s.sectionTitle}>Dernières connexions</div>
-              <button style={s.viewAllBtn} onClick={() => setPage('logs')}>Voir tout →</button>
-            </div>
-            <div style={s.tableWrap}>
-              <table style={s.table}>
-                <thead>
-                  <tr style={s.thead}>
-                    {['Utilisateur','Rôle','Action','Horodatage'].map(h => <th key={h} style={s.th}>{h}</th>)}
-                  </tr>
-                </thead>
-                <tbody>
-                  {MOCK_LOGS.slice(0, 5).map((l, i) => {
-                    const ls = { login: { bg: 'rgba(0,201,167,0.1)', color: '#00C9A7', icon: '🔑' }, logout: { bg: 'rgba(74,108,247,0.1)', color: '#4A6CF7', icon: '🚪' }, action: { bg: 'rgba(255,162,107,0.1)', color: '#FFA26B', icon: '⚡' } }[l.type];
-                    return (
-                      <tr key={i} style={{ ...s.tr, background: i % 2 === 0 ? '#fff' : '#FAFBFF' }}>
-                        <td style={s.td}>
-                          <div style={s.patientCell}>
-                            <div style={{ ...s.patientAvatar, background: ls.bg, color: ls.color, fontSize: 14 }}>{ls.icon}</div>
-                            <span style={s.patientName}>{l.user}</span>
-                          </div>
-                        </td>
-                        <td style={s.td}><span style={{ ...s.roleChip, ...ROLE_COLORS['Médecin'] }}>Médecin</span></td>
-                        <td style={s.td}>{l.action}</td>
-                        <td style={s.td}><span style={{ fontFamily: "'Poppins',sans-serif", fontSize: 12, fontWeight: 700, color: '#4A6CF7' }}>{l.time}</span></td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          </>
-        )}
-
-        {page === 'patients' && <PatientsPage search={search} />}
+        {page === 'overview' && <OverviewPage usersCount={usersCount} logsCount={logsCount} setPage={setPage} />}
         {page === 'users'    && <UsersPage search={search} />}
         {page === 'logs'     && <LogsPage search={search} />}
       </div>
@@ -559,8 +655,6 @@ export default function AdminDashboard() {
 // ─── Styles ───────────────────────────────────────────────────────────────────
 const s = {
   root: { display: 'flex', minHeight: '100vh', fontFamily: "'Nunito', sans-serif", background: '#EEF2FF' },
-
-  // Sidebar
   sidebar: { width: 250, flexShrink: 0, background: 'linear-gradient(170deg, #1a2f6b 0%, #0f1c3f 100%)', display: 'flex', flexDirection: 'column', padding: '28px 16px', position: 'sticky', top: 0, height: '100vh' },
   sidebarBrand: { display: 'flex', alignItems: 'center', gap: 10, marginBottom: 32 },
   brandIcon: { width: 38, height: 38, background: 'linear-gradient(135deg,#4A6CF7,#6B87FF)', borderRadius: 11, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, color: '#fff', boxShadow: '0 5px 15px rgba(74,108,247,0.5)' },
@@ -577,8 +671,6 @@ const s = {
   userName: { fontSize: 13, fontWeight: 800, color: '#fff' },
   userRole: { fontSize: 11, color: 'rgba(255,255,255,0.5)', fontWeight: 600 },
   logoutBtn: { padding: '9px 14px', background: 'rgba(255,107,107,0.15)', color: '#FF6B6B', border: '1px solid rgba(255,107,107,0.25)', borderRadius: 10, fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: "'Nunito', sans-serif", transition: '0.2s' },
-
-  // Main
   main: { flex: 1, padding: '28px 32px', overflowY: 'auto' },
   topbar: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 28 },
   topbarTitle: { fontFamily: "'Poppins', sans-serif", fontWeight: 800, fontSize: 22, color: '#1A2B4A' },
@@ -587,71 +679,55 @@ const s = {
   searchWrap: { position: 'relative' },
   searchIcon: { position: 'absolute', left: 13, top: '50%', transform: 'translateY(-50%)', fontSize: 14, color: '#7A8BAD' },
   searchInput: { background: '#fff', border: '1.5px solid #DDE4F3', borderRadius: 30, padding: '10px 16px 10px 38px', fontSize: 13, fontFamily: "'Nunito', sans-serif", color: '#1A2B4A', outline: 'none', width: 260 },
-  notifBtn: { width: 38, height: 38, border: 'none', background: '#fff', borderRadius: '50%', cursor: 'pointer', fontSize: 16, boxShadow: '0 4px 14px rgba(74,108,247,0.1)' },
   avatar: { width: 38, height: 38, borderRadius: '50%', background: 'linear-gradient(135deg,#9B59B6,#c39bd3)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: 800, fontSize: 13, boxShadow: '0 4px 14px rgba(155,89,182,0.3)' },
-
-  // Stats
-  statsGrid: { display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 16, marginBottom: 28 },
+  statsGrid: { display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 16, marginBottom: 28 },
   statCard: { background: '#fff', borderRadius: 16, padding: '20px', boxShadow: '0 4px 20px rgba(74,108,247,0.08)', display: 'flex', alignItems: 'center', gap: 16, border: '1.5px solid #EEF2FF' },
   statIcon: { width: 48, height: 48, borderRadius: 14, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, flexShrink: 0 },
   statInfo: { display: 'flex', flexDirection: 'column', gap: 2 },
   statValue: { fontFamily: "'Poppins', sans-serif", fontWeight: 800, fontSize: 22, color: '#1A2B4A' },
   statLabel: { fontSize: 12, color: '#7A8BAD', fontWeight: 600 },
   statDelta: { fontSize: 11, fontWeight: 800, marginTop: 2 },
-
-  // Quick cards
+  sectionHeader: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 },
+  sectionTitle: { fontFamily: "'Poppins', sans-serif", fontWeight: 700, fontSize: 15, color: '#1A2B4A' },
   quickCard: { background: '#fff', borderRadius: 16, padding: '24px 20px', border: '1.5px solid #EEF2FF', cursor: 'pointer', display: 'flex', flexDirection: 'column', gap: 8, transition: '0.22s', boxShadow: '0 4px 14px rgba(74,108,247,0.06)' },
   quickIcon: { width: 50, height: 50, borderRadius: 14, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 24, color: '#fff', boxShadow: '0 6px 16px rgba(0,0,0,0.2)' },
   quickLabel: { fontSize: 14, fontWeight: 800, color: '#1A2B4A' },
   quickSub: { fontSize: 12, color: '#7A8BAD', fontWeight: 600 },
-  quickCount: { fontSize: 12, fontWeight: 800, color: '#4A6CF7', background: 'rgba(74,108,247,0.08)', padding: '4px 10px', borderRadius: 8, alignSelf: 'flex-start' },
-
-  // Section
-  sectionHeader: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 },
-  sectionTitle: { fontFamily: "'Poppins', sans-serif", fontWeight: 700, fontSize: 15, color: '#1A2B4A' },
-  viewAllBtn: { background: 'none', border: 'none', color: '#4A6CF7', fontSize: 13, fontWeight: 800, cursor: 'pointer', fontFamily: "'Nunito', sans-serif" },
-
-  // Page title
-  pageTitle: { fontFamily: "'Poppins', sans-serif", fontWeight: 800, fontSize: 18, color: '#1A2B4A', marginBottom: 20 },
-  pageTitleCount: { fontSize: 13, fontWeight: 700, color: '#7A8BAD', marginLeft: 10, background: '#EEF2FF', padding: '3px 10px', borderRadius: 20 },
-
-  // Table
+  infoBanner: { background: 'linear-gradient(135deg,rgba(74,108,247,0.05),rgba(0,201,167,0.03))', border: '1.5px solid rgba(74,108,247,0.15)', borderRadius: 16, padding: '24px 28px' },
+  pageTitle: { fontFamily: "'Poppins', sans-serif", fontWeight: 800, fontSize: 18, color: '#1A2B4A', marginBottom: 0, display: 'flex', alignItems: 'center', gap: 10 },
+  pageTitleCount: { fontSize: 13, fontWeight: 700, color: '#7A8BAD', background: '#EEF2FF', padding: '3px 10px', borderRadius: 20 },
   tableWrap: { background: '#fff', borderRadius: 16, overflow: 'hidden', boxShadow: '0 4px 20px rgba(74,108,247,0.08)', border: '1.5px solid #EEF2FF' },
   table: { width: '100%', borderCollapse: 'collapse' },
   thead: { background: '#F5F8FF' },
   th: { padding: '13px 16px', textAlign: 'left', fontSize: 11, fontWeight: 900, color: '#7A8BAD', textTransform: 'uppercase', letterSpacing: '0.9px', borderBottom: '1.5px solid #EEF2FF', whiteSpace: 'nowrap' },
   tr: { transition: '0.15s' },
   td: { padding: '13px 16px', fontSize: 13, color: '#1A2B4A', fontWeight: 600, borderBottom: '1px solid #EEF2FF' },
-  dossierId: { fontSize: 11, fontWeight: 800, color: '#4A6CF7', fontFamily: "'Poppins', sans-serif" },
   patientCell: { display: 'flex', alignItems: 'center', gap: 10 },
-  patientAvatar: { width: 34, height: 34, borderRadius: '50%', background: 'linear-gradient(135deg,#4A6CF7,#6B87FF)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: 800, fontSize: 11, flexShrink: 0 },
+  patientAvatar: { width: 34, height: 34, borderRadius: '50%', background: 'rgba(74,108,247,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#4A6CF7', fontWeight: 800, fontSize: 11, flexShrink: 0 },
   patientName: { fontWeight: 700, color: '#1A2B4A', fontSize: 13 },
-  ageChip: { background: '#F0F4FF', color: '#4A6CF7', padding: '3px 10px', borderRadius: 30, fontSize: 12, fontWeight: 800 },
-  stadeChip: { background: 'rgba(255,162,107,0.12)', color: '#FFA26B', border: '1px solid rgba(255,162,107,0.25)', padding: '3px 10px', borderRadius: 30, fontSize: 12, fontWeight: 800 },
   statusBadge: { padding: '4px 12px', borderRadius: 30, fontSize: 12, fontWeight: 800, border: '1.5px solid' },
   roleChip: { padding: '4px 12px', borderRadius: 30, fontSize: 12, fontWeight: 800 },
   permBadge: { padding: '3px 8px', borderRadius: 6, fontSize: 11, fontWeight: 700, background: 'rgba(74,108,247,0.08)', color: '#4A6CF7', whiteSpace: 'nowrap' },
   actionBtns: { display: 'flex', gap: 6 },
   iconBtnBlue: { width: 32, height: 32, borderRadius: 8, border: '1.5px solid rgba(74,108,247,0.2)', background: 'rgba(74,108,247,0.05)', cursor: 'pointer', fontSize: 13, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#4A6CF7', transition: '0.2s' },
-
-  // Filter buttons
   filterBtn: { padding: '8px 16px', borderRadius: 30, border: '1.5px solid #DDE4F3', background: '#fff', fontSize: 12, fontWeight: 700, cursor: 'pointer', color: '#7A8BAD', fontFamily: "'Nunito', sans-serif", transition: '0.2s' },
   filterBtnActive: { background: '#4A6CF7', borderColor: '#4A6CF7', color: '#fff' },
-
-  // Modal
   modalOverlay: { position: 'fixed', inset: 0, background: 'rgba(10,20,50,0.55)', backdropFilter: 'blur(8px)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 },
-  modal: { background: '#fff', borderRadius: 24, width: '100%', maxWidth: 680, maxHeight: '90vh', display: 'flex', flexDirection: 'column', boxShadow: '0 28px 70px rgba(0,0,0,0.2)', animation: 'popIn 0.3s cubic-bezier(0.34,1.56,0.64,1)' },
+  modal: { background: '#fff', borderRadius: 24, width: '100%', maxWidth: 700, maxHeight: '92vh', display: 'flex', flexDirection: 'column', boxShadow: '0 28px 70px rgba(0,0,0,0.2)' },
   modalHeader: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '22px 28px', borderBottom: '1.5px solid #EEF2FF' },
   modalTitle: { display: 'flex', alignItems: 'center', gap: 12, fontFamily: "'Poppins', sans-serif", fontWeight: 800, fontSize: 18, color: '#1A2B4A' },
   modalIcon: { width: 38, height: 38, background: 'linear-gradient(135deg,#4A6CF7,#6B87FF)', borderRadius: 11, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, color: '#fff' },
   modalClose: { width: 34, height: 34, borderRadius: 8, border: '1.5px solid #DDE4F3', background: '#F5F8FF', cursor: 'pointer', fontSize: 16, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#7A8BAD' },
   modalBody: { padding: '24px 28px', overflowY: 'auto', flex: 1 },
   modalSection: { marginBottom: 24 },
-  modalSectionLabel: { fontSize: 10.5, fontWeight: 900, color: '#7A8BAD', textTransform: 'uppercase', letterSpacing: '1.3px', marginBottom: 14, display: 'flex', alignItems: 'center', gap: 8 },
+  modalSectionLabel: { fontSize: 10.5, fontWeight: 900, color: '#7A8BAD', textTransform: 'uppercase', letterSpacing: '1.3px', marginBottom: 14 },
   modalGrid2: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 12 },
   mfg: { display: 'flex', flexDirection: 'column', gap: 5 },
   ml: { fontSize: 11.5, fontWeight: 700, color: '#7A8BAD' },
-  mi: { background: '#F5F8FF', border: '1.5px solid #DDE4F3', borderRadius: 10, padding: '10px 14px', fontSize: 13, fontFamily: "'Nunito', sans-serif", color: '#1A2B4A', outline: 'none', width: '100%' },
+  mi: { background: '#F5F8FF', border: '1.5px solid #DDE4F3', borderRadius: 10, padding: '10px 14px', fontSize: 13, fontFamily: "'Nunito', sans-serif", color: '#1A2B4A', outline: 'none', width: '100%', boxSizing: 'border-box' },
+  miErr: { borderColor: '#FF6B6B', background: 'rgba(255,107,107,0.04)' },
+  errTxt: { fontSize: 11, color: '#FF6B6B', fontWeight: 700 },
+  errBanner: { background: 'rgba(255,107,107,0.08)', border: '1.5px solid rgba(255,107,107,0.25)', borderRadius: 10, padding: '12px 16px', fontSize: 13, color: '#FF6B6B', fontWeight: 700, marginBottom: 16 },
   statusToggle: { padding: '8px 16px', borderRadius: 30, border: '1.5px solid #DDE4F3', background: '#F5F8FF', fontSize: 12, fontWeight: 700, cursor: 'pointer', color: '#7A8BAD', fontFamily: "'Nunito', sans-serif", transition: '0.2s' },
   statusToggleActive: { background: '#4A6CF7', borderColor: '#4A6CF7', color: '#fff' },
   permGrid: { display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 10 },
@@ -663,11 +739,7 @@ const s = {
   permCheck: { position: 'absolute', top: 10, right: 10, width: 20, height: 20, borderRadius: '50%', border: '2px solid #DDE4F3', background: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 900 },
   permCheckActive: { background: '#4A6CF7', borderColor: '#4A6CF7', color: '#fff' },
   modalFooter: { display: 'flex', gap: 12, padding: '18px 28px', borderTop: '1.5px solid #EEF2FF', justifyContent: 'flex-end' },
-
-  // Buttons
   btnPrimary: { padding: '11px 24px', borderRadius: 30, border: 'none', background: 'linear-gradient(135deg,#4A6CF7,#6B87FF)', color: '#fff', fontSize: 13, fontWeight: 800, cursor: 'pointer', fontFamily: "'Nunito', sans-serif", boxShadow: '0 6px 20px rgba(74,108,247,0.35)', transition: '0.2s' },
   btnGhost: { padding: '11px 24px', borderRadius: 30, border: '1.5px solid #DDE4F3', background: '#F5F8FF', color: '#7A8BAD', fontSize: 13, fontWeight: 800, cursor: 'pointer', fontFamily: "'Nunito', sans-serif", transition: '0.2s' },
-
-  // Toast
-  toast: { position: 'fixed', bottom: 24, right: 24, background: 'linear-gradient(135deg,#00C9A7,#00a98b)', color: '#fff', padding: '14px 24px', borderRadius: 14, fontSize: 14, fontWeight: 800, boxShadow: '0 10px 30px rgba(0,201,167,0.4)', zIndex: 2000, fontFamily: "'Nunito', sans-serif" },
+  toast: { position: 'fixed', bottom: 24, right: 24, color: '#fff', padding: '14px 24px', borderRadius: 14, fontSize: 14, fontWeight: 800, boxShadow: '0 10px 30px rgba(0,0,0,0.2)', zIndex: 2000, fontFamily: "'Nunito', sans-serif", maxWidth: 400 },
 };

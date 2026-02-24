@@ -22,6 +22,7 @@ INSTALLED_APPS = [
     # Apps
     'accounts',
     'patients',
+    'django_filters',
 ]
 
 MIDDLEWARE = [

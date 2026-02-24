@@ -61,19 +61,29 @@ class MeView(APIView):
 
 
 class UserListCreateView(generics.ListCreateAPIView):
-
     serializer_class = UserSerializer
     permission_classes = [permissions.IsAdminUser]
 
     def get_queryset(self):
-        admin = self.request.user
-        return User.objects.filter(role__in=['medecin', 'biologiste'], created_by=admin).order_by('-created_at')
+        # Only show users created by this admin
+        return User.objects.filter(
+            role__in=['medecin', 'biologiste'],
+            created_by=self.request.user
+        ).order_by('-created_at')
+
+    def get_serializer_context(self):
+        context = super().get_serializer_context()
+        context['request'] = self.request
+        return context
 
 
 class UserDetailView(generics.RetrieveUpdateDestroyAPIView):
-    queryset           = User.objects.all()
     serializer_class   = UserSerializer
     permission_classes = [permissions.IsAdminUser]
+
+    def get_queryset(self):
+        # Admin can only modify users they created
+        return User.objects.filter(created_by=self.request.user)
 
 
 class LoginLogListView(generics.ListAPIView):
