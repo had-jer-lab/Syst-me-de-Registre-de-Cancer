@@ -52,11 +52,13 @@ function Donut({ pct }) {
 
 export default function Page5() {
   const navigate = useNavigate();
-  const { data } = usePatient();
-  const [checks, setChecks] = useState({ c1: false, c2: false, c3: false });
+  const { data, update } = usePatient();
+  const [checks, setChecks]       = useState({ c1: false, c2: false, c3: false });
   const [unchecked, setUnchecked] = useState([]);
   const [showSuccess, setShowSuccess] = useState(false);
-  const [dossierNum] = useState('DOS-' + new Date().getFullYear() + '-' + Math.floor(Math.random() * 90000 + 10000));
+  const [saving, setSaving]       = useState(false);
+  const [saveError, setSaveError] = useState('');
+  const [createdDossier, setCreatedDossier] = useState('');
 
   // Compute scores
   const s1 = score([data.nom, data.prenom, data.dob, data.tel, data.sexe, data.wilaya, data.couverture], 7);
@@ -69,14 +71,88 @@ export default function Page5() {
 
   const toggleCheck = (key) => setChecks(prev => ({ ...prev, [key]: !prev[key] }));
 
-  const handleSave = () => {
+  // ── SAVE — envoie vraiment les données au backend ─────────────────────────
+  const handleSave = async () => {
+    // 1. Vérifier les checkboxes
     const missing = Object.entries(checks).filter(([, v]) => !v).map(([k]) => k);
     if (missing.length > 0) {
       setUnchecked(missing);
       setTimeout(() => setUnchecked([]), 2000);
       return;
     }
-    setShowSuccess(true);
+
+    setSaving(true);
+    setSaveError('');
+
+    try {
+      const token = localStorage.getItem('access_token');
+      if (!token) {
+        setSaveError('Session expirée. Veuillez vous reconnecter.');
+        setSaving(false);
+        return;
+      }
+
+      // ── 2. Créer le patient ──────────────────────────────────────
+      const patientPayload = {
+        first_name:     data.prenom        || '',
+        last_name:      data.nom           || '',
+        date_naissance: data.dob           || '',
+        sexe:           data.sexe?.includes('Masculin') ? 'M' : 'F',
+        phone:          data.tel           || '',
+        national_id:    data.nin           || null,
+        data_source:    'manual',
+      };
+
+      const patRes = await fetch('http://localhost:8000/api/patients/', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(patientPayload),
+      });
+
+      if (!patRes.ok) {
+        const err = await patRes.json();
+        console.error('Erreur patient:', err);
+        const msg = err.date_naissance?.[0] || err.national_id?.[0] || err.detail || JSON.stringify(err);
+        setSaveError('Erreur : ' + msg);
+        setSaving(false);
+        return;
+      }
+
+      const patient = await patRes.json();
+      setCreatedDossier(patient.numero_dossier || '');
+
+      // ── 3. Créer le cancer si organe renseigné ────────────────────
+      if (data.organe) {
+        const cancerPayload = {
+          patient:         patient.id,
+          stade_clinique:  data.stade    || '',
+          tnm:             [data.tnmT, data.tnmN, data.tnmM].filter(Boolean).join(''),
+          grade:           data.grade    || '',
+          date_diagnostic: data.diagDate || null,
+        };
+
+        await fetch(`http://localhost:8000/api/patients/${patient.id}/cancers/`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify(cancerPayload),
+        });
+      }
+
+      // ── 4. Succès ─────────────────────────────────────────────────
+      setShowSuccess(true);
+
+    } catch (err) {
+      console.error(err);
+      setSaveError('Erreur réseau. Vérifiez que le serveur Django est lancé.');
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
@@ -90,13 +166,27 @@ export default function Page5() {
             <div className="suc-sub">
               Le dossier de <strong>{fullName}</strong> a été créé avec succès.
             </div>
-            <div className="suc-num">{dossierNum}</div>
+            {createdDossier && <div className="suc-num">{createdDossier}</div>}
             <div style={{ display: 'flex', gap: 10, justifyContent: 'center', flexWrap: 'wrap' }}>
-              <button className="btn btn-ghost" onClick={() => { navigate('/page1'); }}>
+              <button className="btn btn-ghost" onClick={() => {
+                // Reset form et retourner page1
+                update({
+                  nom: '', prenom: '', dob: '', age: '', nin: '',
+                  tel: '', email: '', sexe: '', famille: '',
+                  wilaya: '', commune: '', adresse: '', couverture: '', profession: '',
+                  typeT: '', organe: '', lat: '', topo: '', stade: '',
+                  tnmT: 'T0', tnmN: 'N0', tnmM: 'M0',
+                  localise: true, metastatique: false, recidive: false,
+                  diagDate: '', consultDate: '', histo: '', grade: '',
+                  taille: '', recepteurs: '', service: '', medecin: '',
+                  trtActuel: '', dernier_rdv: '', sous_type: '',
+                });
+                navigate('/page1');
+              }}>
                 ➕ Nouveau patient
               </button>
-              <button className="btn btn-primary" onClick={() => setShowSuccess(false)}>
-                📋 Voir dossier
+              <button className="btn btn-primary" onClick={() => navigate('/dashboard')}>
+                📋 Voir mes patients
               </button>
             </div>
           </div>
@@ -149,12 +239,14 @@ export default function Page5() {
               <div className="info-grid">
                 <InfoItem label="Type de tumeur" value={data.typeT} />
                 <InfoItem label="Organe" value={data.organe} />
+                <InfoItem label="Sous-type" value={data.sous_type} />
                 <InfoItem label="Histologie" value={data.histo} />
                 <InfoItem label="Stade" value={data.stade ? 'Stade ' + data.stade : ''} />
                 <InfoItem label="TNM" value={[data.tnmT, data.tnmN, data.tnmM].filter(Boolean).join(' – ')} />
                 <InfoItem label="Taille tumorale" value={data.taille} unit=" cm" />
                 <InfoItem label="Récepteurs" value={data.recepteurs} />
                 <InfoItem label="Date diagnostic" value={data.diagDate ? fmtDate(data.diagDate) : ''} />
+                <InfoItem label="Dernier RDV" value={data.dernier_rdv ? fmtDate(data.dernier_rdv) : ''} />
               </div>
             </div>
           </div>
@@ -226,6 +318,13 @@ export default function Page5() {
             </div>
           </SC>
 
+          {/* Erreur API */}
+          {saveError && (
+            <div style={{ background: 'rgba(255,107,107,0.1)', border: '1.5px solid rgba(255,107,107,0.3)', borderRadius: 12, padding: '14px 18px', fontSize: 13, color: '#FF6B6B', fontWeight: 700 }}>
+              ⚠ {saveError}
+            </div>
+          )}
+
           {/* Confirmation */}
           <SC label="Confirmation avant enregistrement" style={{ borderColor: 'rgba(74,108,247,0.3)' }}>
             {[
@@ -233,15 +332,8 @@ export default function Page5() {
               { key: 'c2', text: 'Le patient ou son représentant légal a donné son consentement à l\'enregistrement de ces données.' },
               { key: 'c3', text: 'Ces données seront traitées conformément à la réglementation en vigueur sur la confidentialité médicale.' },
             ].map(({ key, text }) => (
-              <div
-                key={key}
-                className={`confirm-check ${unchecked.includes(key) ? 'unchecked' : ''}`}
-              >
-                <input
-                  type="checkbox"
-                  checked={checks[key]}
-                  onChange={() => toggleCheck(key)}
-                />
+              <div key={key} className={`confirm-check ${unchecked.includes(key) ? 'unchecked' : ''}`}>
+                <input type="checkbox" checked={checks[key]} onChange={() => toggleCheck(key)} />
                 <span>{text}</span>
               </div>
             ))}
@@ -252,7 +344,7 @@ export default function Page5() {
       <BtnRow
         onBack={() => navigate('/page4')}
         onNext={handleSave}
-        nextLabel="✓ Enregistrer le patient"
+        nextLabel={saving ? '⏳ Enregistrement…' : '✓ Enregistrer le patient'}
         nextClass="btn-success"
       />
     </Layout>

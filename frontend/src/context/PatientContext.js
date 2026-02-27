@@ -1,7 +1,6 @@
 import React, { createContext, useContext, useState } from 'react';
 
 const PatientContext = createContext();
-
 export const usePatient = () => useContext(PatientContext);
 
 export const PatientProvider = ({ children }) => {
@@ -17,6 +16,8 @@ export const PatientProvider = ({ children }) => {
     diagDate: '', consultDate: '', histo: '', grade: '',
     taille: '', recepteurs: '', service: '', medecin: '',
     trtActuel: '',
+    dernier_rdv: '',   // ✅ NOUVEAU — Date du dernier RDV
+    sous_type: '',     // ✅ NOUVEAU — Sous-type de cancer
     // Page 3
     cea: '', ca199: '', ca125: '', afp: '', psa: '', ca153: '',
     nfs: '', creat: '', ggt: '', ldh: '', hb: '', tp: '',

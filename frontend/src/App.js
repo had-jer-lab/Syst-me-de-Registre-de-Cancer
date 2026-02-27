@@ -8,6 +8,7 @@ import AuthPage   from './pages/AuthPage';
 import Dashboard  from './pages/Dashboard';
 import ImportData from './pages/ImportData';
 import DiscussionRCP from './pages/DiscussionRCP';
+import EditPatient from './pages/EditPatient';
 import Page1 from './pages/Page1';
 import Page2 from './pages/Page2';
 import Page3 from './pages/Page3';
@@ -37,6 +38,8 @@ export default function App() {
           <Route path="/page3"     element={<Page3 />} />
           <Route path="/page4"     element={<Page4 />} />
           <Route path="/page5"     element={<Page5 />} />
+          <Route path="/patient/:id/edit" element={<EditPatient />} />
+
 
           {/* Fallback */}
           <Route path="*"          element={<Navigate to="/auth" replace />} />
