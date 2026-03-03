@@ -4,3 +4,4 @@ from django.apps import AppConfig
 class RcpConfig(AppConfig):
     default_auto_field = 'django.db.models.BigAutoField'
     name = 'rcp'
+    verbose_name = 'Réunions RCP'
