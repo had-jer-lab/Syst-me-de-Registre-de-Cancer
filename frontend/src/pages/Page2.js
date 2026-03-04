@@ -47,9 +47,9 @@ const HISTO_TYPES = [
 
 // Options de statut de localisation — sélection unique (une seule à la fois)
 const LOCALISATION_OPTIONS = [
-  { val: 'localise',     label: '📍 Localisé',     desc: 'Tumeur limitée à l\'organe d\'origine' },
-  { val: 'metastatique', label: '🔴 Métastatique', desc: 'Présence de métastases à distance' },
-  { val: 'recidive',     label: '🔄 Récidive',     desc: 'Réapparition après rémission' },
+  { val: 'localise',     label: 'Localisé',     desc: 'Tumeur limitée à l\'organe d\'origine' },
+  { val: 'metastatique', label: 'Métastatique', desc: 'Présence de métastases à distance' },
+  { val: 'recidive',     label: 'Récidive',     desc: 'Réapparition après rémission' },
 ];
 
 export default function Page2() {
@@ -134,7 +134,7 @@ export default function Page2() {
 
               {!data.organe ? (
                 <div style={s.stPlaceholder}>
-                  <span style={s.stPlaceholderIcon}>☝️</span>
+                  <span style={s.stPlaceholderIcon}></span>
                   Sélectionnez d'abord l'organe principal
                 </div>
               ) : (
@@ -243,11 +243,11 @@ export default function Page2() {
                       const diff = Math.floor(
                         (new Date() - new Date(data.dernier_rdv)) / 86400000
                       );
-                      if (diff === 0) return '🟢 Aujourd\'hui';
-                      if (diff <= 7)  return `🟢 ${diff}j`;
-                      if (diff <= 30) return `🟡 ${diff}j`;
-                      if (diff <= 365) return `🟠 ${Math.floor(diff/30)} mois`;
-                      return `🔴 ${Math.floor(diff/365)} an(s)`;
+                      if (diff === 0) return 'Aujourd\'hui';
+                      if (diff <= 7)  return `${diff}j`;
+                      if (diff <= 30) return `${diff}j`;
+                      if (diff <= 365) return `${Math.floor(diff/30)} mois`;
+                      return `${Math.floor(diff/365)} an(s)`;
                     })()}
                   </span>
                 )}
