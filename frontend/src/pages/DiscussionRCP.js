@@ -53,6 +53,21 @@ export default function DiscussionRCP() {
   const [showMyPatients,setShowMyPatients]= useState(false);
   const [toast,         setToast]         = useState('');
 
+  // ── 🎤 Vocal recording ────────────────────────────────────────────────────
+  const [isRecording,   setIsRecording]   = useState(false);
+  const [recSeconds,    setRecSeconds]    = useState(0);
+  const recIntervalRef  = useRef(null);
+  const mediaRecorderRef = useRef(null);
+  const audioChunksRef  = useRef([]);
+
+  // ── 🗳️ Multi-message vote selection ──────────────────────────────────────
+  const [voteSelectMode,  setVoteSelectMode]  = useState(false);
+  const [selectedMsgIds,  setSelectedMsgIds]  = useState(new Set());
+
+  // ── 🔔 Notification sound ─────────────────────────────────────────────────
+  const lastMsgCountRef = useRef(0);
+  const notifSoundRef   = useRef(null);
+
   // ── State Create RCP Modal ─────────────────────────────────────────────────
   const [showCreateModal,   setShowCreateModal]   = useState(false);
   const [createStep,        setCreateStep]        = useState(1); // 1=patient, 2=cancer, 3=doctors+date
@@ -67,6 +82,23 @@ export default function DiscussionRCP() {
 
   const chatRef = useRef(null);
   const unreadCount = notifs.filter(n => !n.is_read).length;
+
+  // ── 🔔 Play notification sound ────────────────────────────────────────────
+  const playNotifSound = useCallback((freq = 520) => {
+    try {
+      const ctx = new (window.AudioContext || window.webkitAudioContext)();
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.frequency.setValueAtTime(freq, ctx.currentTime);
+      osc.frequency.exponentialRampToValueAtTime(freq * 1.3, ctx.currentTime + 0.12);
+      gain.gain.setValueAtTime(0.15, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.5);
+      osc.start(ctx.currentTime);
+      osc.stop(ctx.currentTime + 0.5);
+    } catch (_) {}
+  }, []);
 
   // ── Toast ──────────────────────────────────────────────────────────────────
   const showToast = (msg) => { setToast(msg); setTimeout(() => setToast(''), 3500); };
@@ -90,10 +122,24 @@ export default function DiscussionRCP() {
   useEffect(() => {
     if (!selectedRcp) return;
     const iv = setInterval(async () => {
-      try { const d = await apiFetch(`rcp/${selectedRcp.rcp_id}/`); if (d) setSelectedRcp(d); } catch {}
+      try {
+        const d = await apiFetch(`rcp/${selectedRcp.rcp_id}/`);
+        if (d) {
+          const newCount = (d.messages || []).length;
+          const oldCount = lastMsgCountRef.current;
+          // 🔔 New message arrived → play sound + toast
+          if (newCount > oldCount && oldCount > 0) {
+            const lastMsg = d.messages[d.messages.length - 1];
+            playNotifSound();
+            showToast(`💬 ${lastMsg.user}: ${lastMsg.message.substring(0, 50)}${lastMsg.message.length > 50 ? '…' : ''}`);
+          }
+          lastMsgCountRef.current = newCount;
+          setSelectedRcp(d);
+        }
+      } catch {}
     }, 10000);
     return () => clearInterval(iv);
-  }, [selectedRcp]);
+  }, [selectedRcp, playNotifSound]);
 
   useEffect(() => {
     if (chatRef.current) chatRef.current.scrollTop = chatRef.current.scrollHeight;
@@ -116,7 +162,16 @@ export default function DiscussionRCP() {
   // ── Sélectionner RCP ───────────────────────────────────────────────────────
   const selectRcp = async (rcpId) => {
     setLoadingRcp(true);
-    try { const d = await apiFetch(`rcp/${rcpId}/`); if (d) { setSelectedRcp(d); setIsMinimized(false); } }
+    setVoteSelectMode(false);
+    setSelectedMsgIds(new Set());
+    try {
+      const d = await apiFetch(`rcp/${rcpId}/`);
+      if (d) {
+        lastMsgCountRef.current = (d.messages || []).length;
+        setSelectedRcp(d);
+        setIsMinimized(false);
+      }
+    }
     catch { showToast('Erreur chargement RCP'); }
     finally { setLoadingRcp(false); }
   };
@@ -186,6 +241,90 @@ export default function DiscussionRCP() {
     setVoteProposal(msgText);
     setShowVoteInput(true);
   };
+
+  // ── 🗳️ Toggle multi-vote selection mode ───────────────────────────────────
+  const toggleVoteSelectMode = () => {
+    setVoteSelectMode(v => !v);
+    setSelectedMsgIds(new Set());
+  };
+
+  const toggleMsgSelection = (msgId) => {
+    if (!voteSelectMode) return;
+    setSelectedMsgIds(prev => {
+      const next = new Set(prev);
+      next.has(msgId) ? next.delete(msgId) : next.add(msgId);
+      return next;
+    });
+  };
+
+  const handleMultiVote = () => {
+    if (selectedMsgIds.size === 0) return;
+    const msgs = (selectedRcp.messages || [])
+      .filter(m => selectedMsgIds.has(m.id))
+      .map(m => m.message)
+      .join('\n— ');
+    setVoteProposal(msgs);
+    setShowVoteInput(true);
+    setVoteSelectMode(false);
+    setSelectedMsgIds(new Set());
+  };
+
+  // ── 🎤 Voice recording ─────────────────────────────────────────────────────
+  const startRecording = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      audioChunksRef.current = [];
+      const mr = new MediaRecorder(stream);
+      mediaRecorderRef.current = mr;
+      mr.ondataavailable = e => { if (e.data.size > 0) audioChunksRef.current.push(e.data); };
+      mr.start();
+      setIsRecording(true);
+      setRecSeconds(0);
+      recIntervalRef.current = setInterval(() => setRecSeconds(s => s + 1), 1000);
+    } catch {
+      showToast('❌ Microphone non autorisé');
+    }
+  };
+
+  const cancelRecording = () => {
+    mediaRecorderRef.current?.stop();
+    mediaRecorderRef.current?.stream?.getTracks().forEach(t => t.stop());
+    clearInterval(recIntervalRef.current);
+    setIsRecording(false);
+    setRecSeconds(0);
+    audioChunksRef.current = [];
+  };
+
+  const sendVoiceMessage = () => {
+    if (!mediaRecorderRef.current) return;
+    mediaRecorderRef.current.onstop = async () => {
+      const blob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
+      const formData = new FormData();
+      formData.append('audio', blob, 'voice.webm');
+      formData.append('duration', recSeconds);
+      const token = localStorage.getItem('access_token');
+      try {
+        const res = await fetch(`${API}rcp/${selectedRcp.rcp_id}/chat/`, {
+          method: 'POST',
+          headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+          body: formData,
+        });
+        if (res.ok) {
+          const msg = await res.json();
+          setSelectedRcp(prev => ({ ...prev, messages: [...prev.messages, msg] }));
+        }
+      } catch { showToast('Erreur envoi vocal'); }
+      cancelRecording();
+    };
+    mediaRecorderRef.current.stop();
+    mediaRecorderRef.current.stream?.getTracks().forEach(t => t.stop());
+    clearInterval(recIntervalRef.current);
+    setIsRecording(false);
+    setRecSeconds(0);
+  };
+
+  // helper: format mm:ss
+  const fmtDur = (s) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
 
   // ── Démarrer RCP ──────────────────────────────────────────────────────────
   const handleStartRcp = async () => {
@@ -300,6 +439,15 @@ export default function DiscussionRCP() {
         .doctor-row:hover { background: #EBF8FF !important; }
         @keyframes slideIn { from{opacity:0;transform:translateY(-10px)} to{opacity:1;transform:translateY(0)} }
         @keyframes fadeIn  { from{opacity:0} to{opacity:1} }
+        @keyframes blink   { 0%,100%{opacity:1} 50%{opacity:.2} }
+        @keyframes wavePulse { 0%,100%{transform:scaleY(.4)} 50%{transform:scaleY(1)} }
+        @keyframes toastIn { from{opacity:0;transform:translateX(40px)} to{opacity:1;transform:translateX(0)} }
+        .msg-bubble-selectable { cursor:pointer; transition:outline .15s; }
+        .msg-bubble-selectable:hover { outline: 2px solid rgba(74,144,226,.4); outline-offset:2px; border-radius:18px; }
+        .msg-bubble-selected { outline: 2.5px solid #4A90E2 !important; outline-offset:2px; border-radius:18px; }
+        .rec-wave-bar { display:inline-block; width:3px; border-radius:3px; background:#E53E3E; opacity:.7; animation: wavePulse .9s ease-in-out infinite; margin:0 1px; }
+        .voice-wave-bar { display:inline-block; width:3px; border-radius:3px; opacity:.75; animation: wavePulse 1.1s ease-in-out infinite; margin:0 1px; }
+        .notif-toast-anim { animation: toastIn .35s cubic-bezier(.34,1.56,.64,1); }
       `}</style>
 
       {/* ── HEADER ── */}
@@ -765,6 +913,36 @@ export default function DiscussionRCP() {
                       💬 Discussion
                     </h3>
 
+                    {/* 🗳️ Multi-vote select toolbar */}
+                    {selectedRcp.is_creator && selectedRcp.status === 'ongoing' && !selectedRcp.vote_open && !selectedRcp.decision && (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+                        <button
+                          className="btn-h"
+                          onClick={toggleVoteSelectMode}
+                          style={{
+                            padding: '5px 13px', fontSize: 12, fontWeight: 700, borderRadius: 8, border: 'none', cursor: 'pointer',
+                            background: voteSelectMode ? '#4A90E2' : '#EBF4FF',
+                            color:      voteSelectMode ? 'white'   : '#2B6CB0',
+                            transition: 'all .2s',
+                          }}>
+                          🗳️ {voteSelectMode ? 'Annuler sélection' : 'Sélectionner messages à voter'}
+                        </button>
+                        {voteSelectMode && selectedMsgIds.size > 0 && (
+                          <button
+                            className="btn-h"
+                            onClick={handleMultiVote}
+                            style={{ padding: '5px 13px', fontSize: 12, fontWeight: 700, borderRadius: 8, border: 'none', cursor: 'pointer', background: '#C6F6D5', color: '#276749' }}>
+                            ✓ Soumettre {selectedMsgIds.size} message(s) au vote
+                          </button>
+                        )}
+                        {voteSelectMode && (
+                          <span style={{ fontSize: 11, color: '#718096', fontStyle: 'italic' }}>
+                            Cliquez sur les messages à sélectionner
+                          </span>
+                        )}
+                      </div>
+                    )}
+
                     {(selectedRcp.messages || []).length === 0 ? (
                       <p style={{ color: '#a0aec0', textAlign: 'center', padding: 28 }}>Aucun message</p>
                     ) : (
@@ -793,24 +971,51 @@ export default function DiscussionRCP() {
                                     {(msg.user || '?')[0].toUpperCase()}
                                   </div>
                                 )}
-                                <div style={{ display: 'flex', flexDirection: 'column', alignItems: isOwn ? 'flex-end' : 'flex-start' }}>
-                                  {/* Bubble */}
-                                  <div style={{
-                                    padding: '9px 13px',
-                                    borderRadius: isOwn ? '18px 18px 4px 18px' : '18px 18px 18px 4px',
-                                    background: isOwn ? 'linear-gradient(135deg, #4A6CF7, #6B87FF)' : '#F0F4FF',
-                                    color: isOwn ? '#fff' : '#2D3748',
-                                    fontSize: 13, lineHeight: 1.5,
-                                    boxShadow: isOwn ? '0 2px 8px rgba(74,108,247,.25)' : '0 1px 3px rgba(0,0,0,.08)',
-                                    wordBreak: 'break-word',
-                                  }}>
-                                    {msg.message}
+                          <div style={{ display: 'flex', flexDirection: 'column', alignItems: isOwn ? 'flex-end' : 'flex-start' }}>
+                              {/* Bubble — supports text & voice */}
+                              <div
+                                className={`${voteSelectMode ? 'msg-bubble-selectable' : ''} ${voteSelectMode && selectedMsgIds.has(msg.id) ? 'msg-bubble-selected' : ''}`}
+                                onClick={() => toggleMsgSelection(msg.id)}
+                                style={{
+                                  padding: '9px 13px',
+                                  borderRadius: isOwn ? '18px 18px 4px 18px' : '18px 18px 18px 4px',
+                                  background: isOwn ? 'linear-gradient(135deg, #4A6CF7, #6B87FF)' : '#F0F4FF',
+                                  color: isOwn ? '#fff' : '#2D3748',
+                                  fontSize: 13, lineHeight: 1.5,
+                                  boxShadow: isOwn ? '0 2px 8px rgba(74,108,247,.25)' : '0 1px 3px rgba(0,0,0,.08)',
+                                  wordBreak: 'break-word', position: 'relative',
+                                  minWidth: msg.type === 'voice' ? 180 : 'unset',
+                                }}>
+                                {/* ✓ selection badge */}
+                                {voteSelectMode && selectedMsgIds.has(msg.id) && (
+                                  <div style={{ position: 'absolute', top: -8, left: isOwn ? 'auto' : -8, right: isOwn ? -8 : 'auto', width: 20, height: 20, borderRadius: '50%', background: '#4A90E2', color: 'white', fontSize: 11, display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 2px 6px rgba(74,144,226,.5)' }}>✓</div>
+                                )}
+
+                                {/* Voice message */}
+                                {msg.type === 'voice' ? (
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                                    <button
+                                      onClick={e => { e.stopPropagation(); const a = document.getElementById(`audio-${msg.id}`); a && (a.paused ? a.play() : a.pause()); }}
+                                      style={{ width: 30, height: 30, borderRadius: '50%', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, background: isOwn ? 'rgba(255,255,255,.25)' : '#4A90E2', color: isOwn ? 'white' : 'white', flexShrink: 0 }}>
+                                      ▶
+                                    </button>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: 2, height: 26 }}>
+                                      {[14,20,28,18,32,22,16,28,20,14,24,18,30,16,22,18].map((h, i) => (
+                                        <span key={i} className="voice-wave-bar" style={{ height: h, background: isOwn ? 'rgba(255,255,255,.85)' : '#4A90E2', animationDelay: `${i * 0.07}s` }} />
+                                      ))}
+                                    </div>
+                                    <span style={{ fontSize: 11.5, opacity: .75 }}>{msg.duration || '0:00'}</span>
+                                    {msg.audio_url && <audio id={`audio-${msg.id}`} src={msg.audio_url} style={{ display: 'none' }} />}
                                   </div>
-                                  {/* Heure */}
-                                  <span style={{ fontSize: 10, color: '#a0aec0', marginTop: 3, paddingLeft: 4, paddingRight: 4 }}>
-                                    {msg.time}
-                                  </span>
-                                </div>
+                                ) : (
+                                  msg.message
+                                )}
+                              </div>
+                              {/* Heure */}
+                              <span style={{ fontSize: 10, color: '#a0aec0', marginTop: 3, paddingLeft: 4, paddingRight: 4 }}>
+                                {msg.time}
+                              </span>
+                            </div>
                               </div>
                               {/* زر Mettre en vote للمنشئ فقط */}
                               {selectedRcp.is_creator && selectedRcp.status === 'ongoing' && !selectedRcp.vote_open && !selectedRcp.decision && (
@@ -1034,24 +1239,69 @@ export default function DiscussionRCP() {
             </div>
           </div>
 
-          {/* Input message */}
+          {/* Input message + Recording */}
           {selectedRcp && selectedRcp.status === 'ongoing' && (
-            <div style={s.inputArea}>
-              <input type="text"
-                placeholder="Écrire un commentaire... (Entrée pour envoyer)"
-                style={s.msgInput}
-                value={messageInput}
-                onChange={e => setMessageInput(e.target.value)}
-                onKeyPress={e => e.key === 'Enter' && sendMessage()}
-              />
-              <button className="btn-h" style={s.sendBtn} onClick={sendMessage}>Envoyer ➤</button>
-            </div>
+            <>
+              {/* 🎤 Recording bar */}
+              {isRecording && (
+                <div style={s.recBar}>
+                  <div style={{ width: 10, height: 10, borderRadius: '50%', background: '#E53E3E', animation: 'blink .9s infinite', flexShrink: 0 }} />
+                  <div style={{ fontSize: 15, fontWeight: 700, color: '#E53E3E', minWidth: 46, fontVariantNumeric: 'tabular-nums' }}>
+                    {fmtDur(recSeconds)}
+                  </div>
+                  <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 2, height: 26 }}>
+                    {Array.from({ length: 16 }, (_, i) => (
+                      <span key={i} className="rec-wave-bar" style={{ height: 8 + Math.sin(i * 0.8) * 10 + 6, animationDelay: `${i * 0.06}s` }} />
+                    ))}
+                  </div>
+                  <button onClick={cancelRecording} style={s.recCancelBtn}>✕ Annuler</button>
+                  <button onClick={sendVoiceMessage} style={s.recSendBtn}>📤 Envoyer</button>
+                </div>
+              )}
+
+              {/* Text input */}
+              {!isRecording && (
+                <div style={s.inputArea}>
+                  <input type="text"
+                    placeholder="Écrire un commentaire... (Entrée pour envoyer)"
+                    style={s.msgInput}
+                    value={messageInput}
+                    onChange={e => setMessageInput(e.target.value)}
+                    onKeyPress={e => e.key === 'Enter' && sendMessage()}
+                  />
+                  {/* 🎤 Mic button */}
+                  <button
+                    className="btn-h"
+                    title="Message vocal"
+                    onClick={startRecording}
+                    style={{ width: 40, height: 40, borderRadius: 9, border: '1.5px solid #e2e8f0', background: '#f7fafc', color: '#718096', fontSize: 17, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all .2s', flexShrink: 0 }}>
+                    🎤
+                  </button>
+                  <button className="btn-h" style={s.sendBtn} onClick={sendMessage}>Envoyer ➤</button>
+                </div>
+              )}
+            </>
           )}
         </div>
       </div>
 
-      {/* Toast */}
-      {toast && <div style={s.toast}>{toast}</div>}
+      {/* 🔔 Toast Notification */}
+      {toast && (
+        <div className="notif-toast-anim" style={s.notifToast}>
+          <div style={{ fontSize: 22, flexShrink: 0 }}>
+            {toast.startsWith('💬') ? '💬' : toast.startsWith('✓') ? '✅' : toast.startsWith('❌') ? '❌' : '🔔'}
+          </div>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: 13, fontWeight: 700, color: '#2d3748', marginBottom: 2 }}>
+              {toast.startsWith('💬') ? 'Nouveau message' : 'Notification'}
+            </div>
+            <div style={{ fontSize: 12, color: '#718096', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {toast}
+            </div>
+          </div>
+          <button onClick={() => setToast('')} style={{ background: 'none', border: 'none', color: '#a0aec0', cursor: 'pointer', fontSize: 15, padding: '2px 6px' }}>✕</button>
+        </div>
+      )}
     </div>
   );
 }
@@ -1133,4 +1383,10 @@ const s = {
   startBtn:       { padding: '11px 28px', background: 'linear-gradient(135deg,#48BB78,#38A169)', color: 'white', border: 'none', borderRadius: 10, fontSize: 15, fontWeight: 700, cursor: 'pointer', transition: 'all .2s', boxShadow: '0 4px 14px rgba(72,187,120,.4)' },
   scheduledBanner:{ background: '#FFFBEB', borderRadius: 14, padding: '28px 20px', textAlign: 'center', border: '2px solid #F6AD55', marginBottom: 18 },
   toast:          { position: 'fixed', bottom: 20, right: 20, background: 'linear-gradient(135deg,#4A90E2,#5CA0F2)', color: 'white', padding: '12px 20px', borderRadius: 11, fontSize: 13, fontWeight: 700, boxShadow: '0 10px 28px rgba(74,144,226,.4)', zIndex: 9999 },
+  // 🔔 Rich toast
+  notifToast:     { position: 'fixed', top: 82, right: 20, zIndex: 9999, background: 'white', borderRadius: 13, padding: '14px 16px', boxShadow: '0 8px 30px rgba(0,0,0,.14)', borderLeft: '4px solid #4A90E2', display: 'flex', gap: 10, alignItems: 'center', minWidth: 280, maxWidth: 360 },
+  // 🎤 Recording bar
+  recBar:         { display: 'flex', alignItems: 'center', gap: 12, padding: '10px 20px', background: '#FFF5F5', borderTop: '1.5px solid #FEB2B2', flexShrink: 0 },
+  recCancelBtn:   { background: '#FED7D7', border: 'none', borderRadius: 8, padding: '7px 14px', fontSize: 12.5, fontWeight: 700, color: '#C53030', cursor: 'pointer' },
+  recSendBtn:     { background: '#4A90E2', border: 'none', borderRadius: 8, padding: '7px 14px', fontSize: 12.5, fontWeight: 700, color: 'white', cursor: 'pointer' },
 };s
