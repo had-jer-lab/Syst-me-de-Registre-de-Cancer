@@ -1,8 +1,9 @@
+import os
 from pathlib import Path
 from decouple import config
 from datetime import timedelta
 
-BASE_DIR = Path(__file__).resolve().parent.parent
+BASE_DIR = Path(__file__).resolve().parent.parent  # ✅ أولاً
 
 SECRET_KEY = config('SECRET_KEY')
 DEBUG = config('DEBUG', cast=bool, default=True)
@@ -23,6 +24,7 @@ INSTALLED_APPS = [
     'accounts',
     'patients',
     'django_filters',
+    'rcp',
 ]
 
 MIDDLEWARE = [
@@ -59,11 +61,11 @@ WSGI_APPLICATION = 'config.wsgi.application'
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.postgresql',
-        'NAME':     config('DB_NAME'),
-        'USER':     config('DB_USER'),
-        'PASSWORD': config('DB_PASSWORD'),
+        'NAME':     'cancer_registry',
+        'USER':    'postgres',
+        'PASSWORD': '1234',
         'HOST':     config('DB_HOST', default='localhost'),
-        'PORT':     config('DB_PORT', default='5433'),
+        'PORT':     config('DB_PORT', default='5432'),
     }
 }
 
@@ -94,3 +96,7 @@ USE_TZ = True
 
 STATIC_URL = '/static/'
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+
+# ✅ Media files — بعد BASE_DIR
+MEDIA_URL  = '/media/'
+MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
