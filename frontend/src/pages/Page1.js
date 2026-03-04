@@ -180,7 +180,7 @@ export default function Page1() {
               />
               {errors.dob && <span style={s.errTxt}>{errors.dob}</span>}
               {data.age && (
-                <span style={s.ageBadge}>🎂 {data.age}</span>
+                <span style={s.ageBadge}>{data.age}</span>
               )}
             </div>
           </SC>

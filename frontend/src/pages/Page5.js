@@ -61,9 +61,9 @@ function getSexeCode(sexe) {
 // Libellé lisible du statut de localisation
 function getLocalisationLabel(val) {
   const map = {
-    localise: '📍 Localisé',
-    metastatique: '🔴 Métastatique',
-    recidive: '🔄 Récidive',
+    localise: 'Localisé',
+    metastatique: 'Métastatique',
+    recidive: 'Récidive',
   };
   return map[val] || '—';
 }
@@ -71,7 +71,7 @@ function getLocalisationLabel(val) {
 export default function Page5() {
   const navigate = useNavigate();
   const { data, update } = usePatient();
-  const [checks, setChecks]       = useState({ c1: false, c2: false, c3: false });
+  const [checks, setChecks]       = useState({ c1: true, c2: true, c3: true });
   const [unchecked, setUnchecked] = useState([]);
   const [showSuccess, setShowSuccess] = useState(false);
   const [saving, setSaving]       = useState(false);
