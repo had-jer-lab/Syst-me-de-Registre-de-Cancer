@@ -2,7 +2,7 @@ import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { usePatient } from '../context/PatientContext';
 import Layout from '../components/Layout';
-import { SC, Field, Select, TagGroup, CircleGroup, Toggle, PageHeader, BtnRow } from '../components/FormFields';
+import { SC, Field, Select, TagGroup, CircleGroup, PageHeader, BtnRow } from '../components/FormFields';
 
 const ORGANES = [
   'Sein','Poumon','Côlon / Rectum','Prostate','Col de l\'utérus','Thyroïde',
@@ -45,6 +45,13 @@ const HISTO_TYPES = [
   'Mélanome','Glioblastome','Carcinome hépatocellulaire','Autre',
 ];
 
+// Options de statut de localisation — sélection unique (une seule à la fois)
+const LOCALISATION_OPTIONS = [
+  { val: 'localise',     label: '📍 Localisé',     desc: 'Tumeur limitée à l\'organe d\'origine' },
+  { val: 'metastatique', label: '🔴 Métastatique', desc: 'Présence de métastases à distance' },
+  { val: 'recidive',     label: '🔄 Récidive',     desc: 'Réapparition après rémission' },
+];
+
 export default function Page2() {
   const navigate = useNavigate();
   const { data, update } = usePatient();
@@ -55,6 +62,16 @@ export default function Page2() {
   };
 
   const sousTypesDispos = data.organe ? (SOUS_TYPES[data.organe] || ['Autre']) : [];
+
+  // Gestion statut localisation — sélection unique
+  const handleLocalisation = (val) => {
+    // Si on clique sur la valeur déjà sélectionnée → désélectionner
+    if (data.localisation === val) {
+      update({ localisation: '' });
+    } else {
+      update({ localisation: val });
+    }
+  };
 
   return (
     <Layout currentStep={2} progress={40}>
@@ -70,13 +87,28 @@ export default function Page2() {
         {/* ══════════════ COLONNE GAUCHE ══════════════ */}
         <div className="col-stack">
 
-          {/* Type de tumeur */}
+          {/* Type de tumeur — Solide / Liquide uniquement */}
           <SC label="Type de tumeur">
-            <TagGroup
-              options={['Solide','Liquide','Hématologique']}
-              value={data.typeT}
-              onChange={v => update({ typeT: v })}
-            />
+            <div style={s.typeGrid}>
+              {[
+                { val: 'Solide',  icon: '⬛', desc: 'Tumeur formant une masse solide (carcinome, sarcome…)' },
+                { val: 'Liquide', icon: '💧', desc: 'Tumeur des cellules du sang (leucémie, lymphome…)' },
+              ].map(({ val, icon, desc }) => (
+                <div
+                  key={val}
+                  style={{
+                    ...s.typeCard,
+                    ...(data.typeT === val ? s.typeCardSel : {}),
+                  }}
+                  onClick={() => update({ typeT: data.typeT === val ? '' : val })}
+                >
+                  <div style={s.typeIcon}>{icon}</div>
+                  <div style={s.typeLabel}>{val}</div>
+                  <div style={s.typeDesc}>{desc}</div>
+                  {data.typeT === val && <div style={s.typeCheck}>✓</div>}
+                </div>
+              ))}
+            </div>
           </SC>
 
           {/* Organe */}
@@ -90,7 +122,6 @@ export default function Page2() {
               />
             </Field>
 
-            {/* ✅ SOUS-TYPE — toujours visible, message d'aide si pas d'organe choisi */}
             <div style={s.stWrap}>
               <div style={s.stHeader}>
                 <span style={s.stDot} />
@@ -122,18 +153,9 @@ export default function Page2() {
                 onChange={v => update({ lat: v })}
               />
             </Field>
-
-            <div style={{ marginTop: 14 }}>
-              <div className="fl" style={{ marginBottom: 8 }}>Niveau topographique</div>
-              <CircleGroup
-                options={['1','2','3','4']}
-                value={data.topo}
-                onChange={v => update({ topo: v })}
-              />
-            </div>
           </SC>
 
-          {/* ✅ STADE TNM — les 3 selects sur UNE SEULE ligne */}
+          {/* Stade TNM */}
           <SC label="Stade TNM">
             <CircleGroup
               options={['I','II','III','IV']}
@@ -141,24 +163,19 @@ export default function Page2() {
               onChange={v => update({ stade: v })}
             />
 
-            {/* ── Les 3 colonnes TNM alignées ── */}
             <div style={{ display:'flex', gap:12, marginTop:14, width:'100%' }}>
-
               <div style={{ flex:'1 1 0', minWidth:0 }}>
                 <div style={s.tnmLabel}>T — Tumeur</div>
                 <Select options={TNM_T} value={data.tnmT} onChange={set('tnmT')} />
               </div>
-
               <div style={{ flex:'1 1 0', minWidth:0 }}>
                 <div style={s.tnmLabel}>N — Ganglion</div>
                 <Select options={TNM_N} value={data.tnmN} onChange={set('tnmN')} />
               </div>
-
               <div style={{ flex:'1 1 0', minWidth:0 }}>
                 <div style={s.tnmLabel}>M — Métastase</div>
                 <Select options={TNM_M} value={data.tnmM} onChange={set('tnmM')} />
               </div>
-
             </div>
           </SC>
 
@@ -176,25 +193,41 @@ export default function Page2() {
         {/* ══════════════ COLONNE DROITE ══════════════ */}
         <div className="col-stack">
 
-          {/* Localisation */}
+          {/* Statut de localisation — UNE SEULE sélection */}
           <SC label="Statut de localisation">
-            <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
-              <Toggle label="Localisé"     checked={data.localise}     onChange={v => update({ localise: v })} />
-              <Toggle label="Métastatique" checked={data.metastatique} onChange={v => update({ metastatique: v })} />
-              <Toggle label="Récidive"     checked={data.recidive}     onChange={v => update({ recidive: v })} />
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              {LOCALISATION_OPTIONS.map(({ val, label, desc }) => {
+                const isSelected = data.localisation === val;
+                return (
+                  <div
+                    key={val}
+                    style={{
+                      ...s.locCard,
+                      ...(isSelected ? s.locCardSel : {}),
+                    }}
+                    onClick={() => handleLocalisation(val)}
+                  >
+                    <div style={{ ...s.locRadio, ...(isSelected ? s.locRadioSel : {}) }}>
+                      {isSelected && <div style={s.locRadioDot} />}
+                    </div>
+                    <div>
+                      <div style={s.locLabel}>{label}</div>
+                      <div style={s.locDesc}>{desc}</div>
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           </SC>
 
           {/* Dates */}
-          <SC label="Date du diagnostic">
-            <Field label="Date de découverte">
+          <SC label="Dates">
+            <Field label="Date de découverte / Diagnostic">
               <input className="fi" type="date" value={data.diagDate} onChange={set('diagDate')} />
             </Field>
             <Field label="Date de la première consultation" style={{ marginTop:10 }}>
               <input className="fi" type="date" value={data.consultDate} onChange={set('consultDate')} />
             </Field>
-
-            {/* ✅ DATE DU DERNIER RDV */}
             <Field label="Date de la dernière consultation" style={{ marginTop:10 }}>
               <div style={s.rdvRow}>
                 <input
@@ -247,18 +280,6 @@ export default function Page2() {
             </Field>
           </SC>
 
-          {/* Médecin référent */}
-          <SC label="Médecin référent">
-            <div className="field-row c2">
-              <Field label="Service">
-                <input className="fi" type="text" placeholder="ex: Oncologie" value={data.service} onChange={set('service')} />
-              </Field>
-              <Field label="Médecin">
-                <input className="fi" type="text" placeholder="Dr. Nom" value={data.medecin} onChange={set('medecin')} />
-              </Field>
-            </div>
-          </SC>
-
         </div>
       </div>
 
@@ -269,6 +290,31 @@ export default function Page2() {
 
 /* ─── Styles ─────────────────────────────────────────────────────────────────── */
 const s = {
+  /* ── Type de tumeur ── */
+  typeGrid: {
+    display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12,
+  },
+  typeCard: {
+    padding: '18px 14px', border: '2px solid var(--border)',
+    borderRadius: 14, cursor: 'pointer', textAlign: 'center',
+    background: 'var(--card)', transition: '0.2s', position: 'relative',
+  },
+  typeCardSel: {
+    border: '2px solid var(--primary)',
+    background: 'rgba(74,108,247,0.05)',
+    boxShadow: '0 4px 16px rgba(74,108,247,0.15)',
+  },
+  typeIcon: { fontSize: 28, marginBottom: 8 },
+  typeLabel: { fontSize: 15, fontWeight: 800, color: 'var(--text)', marginBottom: 4 },
+  typeDesc: { fontSize: 11, color: 'var(--text-muted)', lineHeight: 1.4 },
+  typeCheck: {
+    position: 'absolute', top: 8, right: 10,
+    width: 20, height: 20, borderRadius: '50%',
+    background: 'var(--primary)', color: '#fff',
+    fontSize: 11, fontWeight: 900,
+    display: 'flex', alignItems: 'center', justifyContent: 'center',
+  },
+
   /* ── sous-type ── */
   stWrap: {
     marginTop: 14,
@@ -295,52 +341,39 @@ const s = {
     fontStyle: 'italic', padding: '6px 0',
   },
   stPlaceholderIcon: { fontSize: 16 },
-  stGrid: {
-    display: 'flex', flexWrap: 'wrap', gap: 7,
-  },
-  stChip: {
-    padding: '5px 12px', borderRadius: 20,
-    border: '1.5px solid var(--border)',
-    background: 'var(--card)',
-    color: 'var(--text-muted)',
-    fontSize: 12, fontWeight: 700,
-    cursor: 'pointer',
-    fontFamily: "'Nunito', sans-serif",
-    transition: '0.15s',
-  },
-  stChipSel: {
-    background: 'var(--primary)', borderColor: 'var(--primary)',
-    color: '#fff', boxShadow: '0 3px 10px rgba(74,108,247,0.28)',
-  },
-  stConfirm: {
-    marginTop: 10, display: 'flex', alignItems: 'center', gap: 7,
-    fontSize: 12, fontWeight: 700, color: 'var(--primary)',
-    padding: '5px 11px',
-    background: 'rgba(74,108,247,0.08)',
-    borderRadius: 8, width: 'fit-content',
-  },
-  stCheck: {
-    width: 18, height: 18, borderRadius: '50%',
-    background: 'var(--primary)', color: '#fff',
-    fontSize: 10, fontWeight: 900,
-    display: 'flex', alignItems: 'center', justifyContent: 'center',
-    flexShrink: 0,
-  },
 
-  /* ✅ TNM — 3 colonnes sur une ligne */
-  tnmRow: {
-    display: 'grid',
-    gridTemplateColumns: '1fr 1fr 1fr',
-    gap: 12,
-    marginTop: 14,
-  },
-  tnmCol: {
-    display: 'flex', flexDirection: 'column', gap: 6,
-  },
+  /* ── TNM ── */
   tnmLabel: {
     fontSize: 12, fontWeight: 900, textAlign: 'center',
-    color: 'var(--primary)', letterSpacing: '0.5px',
+    color: 'var(--primary)', letterSpacing: '0.5px', marginBottom: 6,
   },
+
+  /* ── Statut localisation ── */
+  locCard: {
+    display: 'flex', alignItems: 'center', gap: 14,
+    padding: '14px 16px',
+    border: '2px solid var(--border)',
+    borderRadius: 12, cursor: 'pointer',
+    background: 'var(--card)', transition: '0.2s',
+  },
+  locCardSel: {
+    border: '2px solid var(--primary)',
+    background: 'rgba(74,108,247,0.05)',
+    boxShadow: '0 3px 12px rgba(74,108,247,0.12)',
+  },
+  locRadio: {
+    width: 20, height: 20, borderRadius: '50%',
+    border: '2px solid var(--border)',
+    display: 'flex', alignItems: 'center', justifyContent: 'center',
+    flexShrink: 0, transition: '0.2s',
+  },
+  locRadioSel: { border: '2px solid var(--primary)' },
+  locRadioDot: {
+    width: 10, height: 10, borderRadius: '50%',
+    background: 'var(--primary)',
+  },
+  locLabel: { fontSize: 13, fontWeight: 800, color: 'var(--text)' },
+  locDesc:  { fontSize: 11, color: 'var(--text-muted)', marginTop: 2 },
 
   /* ── dernier rdv ── */
   rdvRow: {
