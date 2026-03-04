@@ -2,17 +2,233 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { usePatient } from '../context/PatientContext';
 import Layout from '../components/Layout';
+import DuplicateDetectionModal from '../components/DuplicateDetectionModal';
 import { SC, PageHeader, BtnRow, InfoItem } from '../components/FormFields';
 
 function fmtDate(str) {
   if (!str) return '—';
-  const [y, m, d] = str.split('-');
-  return `${d}/${m}/${y}`;
+  try {
+    // Handle ISO timestamps like 2026-02-28T13:17:37.521981+01:00
+    const d = new Date(str);
+    if (!isNaN(d)) {
+      const dd = String(d.getDate()).padStart(2,'0');
+      const mm = String(d.getMonth()+1).padStart(2,'0');
+      const yyyy = d.getFullYear();
+      return dd + '/' + mm + '/' + yyyy;
+    }
+    // Fallback: plain YYYY-MM-DD
+    const parts = str.split('T')[0].split('-');
+    if (parts.length === 3) return parts[2] + '/' + parts[1] + '/' + parts[0];
+  } catch(_) {}
+  return str;
 }
 
 function score(arr, total) {
-  const filled = arr.filter(v => v && v.toString().trim()).length;
+  // count any value that is not undefined/null and not just whitespace
+  // (including "0" which JS treats as falsy).
+  const filled = arr.filter(v => {
+    if (v === null || v === undefined) return false;
+    const s = v.toString();
+    return s.trim() !== '';
+  }).length;
+  // protect against bad totals
+  if (!total) return 0;
   return Math.round((filled / total) * 100);
+}
+
+// normalize patient object to match modal/duplication helpers
+function normalizePatient(p) {
+  // ── Cancers ───────────────────────────────────────────────────────────────
+  // Detail endpoint  → p.cancers = [{cancer_type_name, stade_clinique, treatments:[...]}]
+  // List  endpoint   → p.dernier_cancer = {organe, stade} (résumé du dernier cancer)
+  // Form context     → p.cancers already array of strings or undefined
+  const rawCancers = Array.isArray(p.cancers) ? p.cancers : [];
+
+  // Helper: clean dash placeholder from backend
+  const cleanDash = (v) => (!v || v === '—' || v === '-') ? '' : v;
+
+  const cancers = rawCancers.length > 0
+    ? rawCancers.map(c => {
+        if (typeof c === 'string') return c;
+        // Detail API: {cancer_type_name, stade_clinique}
+        // cancer_type_name is '' when cancer_type FK is null in DB
+        const name  = cleanDash(c.cancer_type_name)
+          || (typeof c.cancer_type === 'string' ? cleanDash(c.cancer_type) : '')
+          || cleanDash(c.organe) || cleanDash(c.name) || '';
+        const stade = cleanDash(c.stade_clinique || c.stade_pathologique || c.stade || '');
+        if (!name && !stade) return null;
+        // If no name but stade exists → meaningful label
+        const label = name
+          ? (stade ? name + ' (Stade ' + stade + ')' : name)
+          : (stade ? 'Cancer Stade ' + stade : null);
+        return label;
+      }).filter(Boolean)
+    : (() => {
+        // Fallback A: dernier_cancer from list serializer
+        // Backend returns '—' (dash) when cancer_type is null
+        const dc = p.dernier_cancer;
+        if (dc) {
+          const name  = cleanDash(dc.organe || dc.cancer_type_name || dc.name || '');
+          const stade = cleanDash(dc.stade  || dc.stade_clinique || '');
+          const label = name
+            ? (stade ? name + ' (Stade ' + stade + ')' : name)
+            : (stade ? 'Cancer Stade ' + stade : '');
+          if (label.trim()) return [label];
+        }
+        // Fallback B: PatientContext form data (data.organe + data.stade)
+        const organe = cleanDash(p.organe || '');
+        const stade  = cleanDash(p.stade  || '');
+        if (organe) return [stade ? organe + ' (Stade ' + stade + ')' : organe];
+        return [];
+      })();
+
+  // ── Traitements ───────────────────────────────────────────────────────────
+  // Detail API: nested c.treatments = [{type_traitement, protocole}]
+  const nestedTrt = rawCancers.flatMap(c =>
+    typeof c === 'object' && Array.isArray(c.treatments) ? c.treatments : []
+  );
+  const rawTrt = Array.isArray(p.traitements) ? p.traitements : [];
+  // Fallback: PatientContext form fields trtAnt / trtActuel
+  const formTrt = [p.trtAnt, p.trtActuel].filter(Boolean);
+  const traitements = [...rawTrt, ...nestedTrt, ...formTrt].map(t => {
+    if (typeof t === 'string') return cleanDash(t);
+    return cleanDash(t.type_traitement || t.protocole || t.name || '');
+  }).filter(Boolean);
+
+  // ── Geo ───────────────────────────────────────────────────────────────────
+  // PatientDetailSerializer:  wilaya_name = commune.wilaya.name
+  // PatientListSerializer:    wilaya_name = commune.wilaya.name  (same)
+  // PatientContext form:      wilaya is a string (name chosen by user)
+  const wilaya = cleanDash(
+    p.wilaya_name
+    || (p.commune && typeof p.commune === 'object' && p.commune.wilaya
+        ? (p.commune.wilaya.name || '') : '')
+    || (typeof p.wilaya === 'string' ? p.wilaya : '')
+    || ''
+  );
+  const commune = cleanDash(
+    p.commune_name
+    || (p.commune && typeof p.commune === 'object' ? (p.commune.name || '') : '')
+    || (typeof p.commune === 'string' ? p.commune : '')
+    || ''
+  );
+  const medecin = p.medecin_nom || p.medecin || '';
+
+  return {
+    id: p.id,
+    nin: p.national_id || p.nin || '',
+    nom: p.last_name
+      ? ((p.first_name || '') + ' ' + p.last_name).trim()
+      : p.nom || ((p.first_name || '') + ' ' + (p.prenom || '')).trim(),
+    dateNaissance: p.date_naissance || p.dateNaissance || p.dob || '',
+    telephone: p.phone || p.telephone || p.tel || '',
+    wilaya,
+    commune,
+    medecin,
+    cancers,
+    traitements,
+    age:  p.age  || '',
+    // Format cree date — remove ISO noise
+    cree: fmtDate(cleanDash(p.created_at || p.cree || '')),
+  };
+}
+
+// ── Fuzzy similarity helpers (same logic as DuplicateDetectionModal) ────────
+function normStr(s = '') {
+  return s.toString().normalize('NFD').replace(/\p{Diacritic}/gu, '').trim().toLowerCase();
+}
+function levenshtein(a, b) {
+  const m = a.length, n = b.length;
+  const dp = Array.from({ length: m + 1 }, (_, i) => [i, ...Array(n).fill(0)]);
+  for (let j = 0; j <= n; j++) dp[0][j] = j;
+  for (let i = 1; i <= m; i++)
+    for (let j = 1; j <= n; j++)
+      dp[i][j] = a[i-1] === b[j-1] ? dp[i-1][j-1] : 1 + Math.min(dp[i-1][j], dp[i][j-1], dp[i-1][j-1]);
+  return dp[m][n];
+}
+function strSim(a, b) {
+  if (!a || !b) return 0;
+  const na = normStr(a), nb = normStr(b);
+  if (na === nb) return 100;
+  const maxLen = Math.max(na.length, nb.length);
+  if (maxLen === 0) return 100;
+  return Math.round((1 - levenshtein(na, nb) / maxLen) * 100);
+}
+function dateSim(d1, d2) {
+  if (!d1 || !d2) return 0;
+  try {
+    const t1 = new Date(d1), t2 = new Date(d2);
+    if (isNaN(t1) || isNaN(t2)) return normStr(d1) === normStr(d2) ? 100 : 0;
+    const diffDays = Math.abs(t1 - t2) / (1000 * 60 * 60 * 24);
+    if (diffDays === 0) return 100;
+    if (diffDays <= 7) return 80;
+    if (diffDays <= 365) return 30;
+    return 0;
+  } catch { return 0; }
+}
+
+// compute similarity percentage between two normalized patients (weighted)
+function computeSimilarity(a, b) {
+  const fields = [
+    { name: 'nin',           weight: 3, fn: (v1, v2) => normStr(v1) === normStr(v2) ? 100 : 0 },
+    { name: 'nom',           weight: 2, fn: strSim },
+    { name: 'dateNaissance', weight: 2, fn: dateSim },
+    { name: 'telephone',     weight: 2, fn: (v1, v2) => {
+      const t1 = (v1 || '').replace(/\D/g, '');
+      const t2 = (v2 || '').replace(/\D/g, '');
+      if (!t1 || !t2) return 0;
+      return t1 === t2 ? 100 : strSim(t1, t2);
+    }},
+    { name: 'wilaya',        weight: 1, fn: strSim },
+  ];
+  let totalWeight = 0, score = 0;
+  fields.forEach((f) => {
+    totalWeight += f.weight;
+    const va = a[f.name], vb = b[f.name];
+    if (va && vb) score += f.fn(va, vb) * f.weight;
+  });
+  if (totalWeight === 0) return 0;
+  return Math.round(score / totalWeight);
+}
+
+// search for similar existing patient; returns {existing, score} if one >50%
+async function findPossibleDuplicate(candidate, token) {
+  try {
+    const q = encodeURIComponent(candidate.nom || '');
+    // Search list (lightweight)
+    const res = await fetch(`http://localhost:8000/api/patients/?search=${q}`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!res.ok) return null;
+    const data = await res.json();
+    const list = data.results || data;
+
+    // Find best match by score
+    let bestRaw = null, bestScore = 0;
+    list.forEach((raw) => {
+      const ex = normalizePatient(raw);
+      const s = computeSimilarity(ex, candidate);
+      if (s > bestScore) { bestScore = s; bestRaw = raw; }
+    });
+    if (bestScore <= 50 || !bestRaw) return null;
+
+    // Fetch full detail to get cancers + treatments nested
+    try {
+      const detailRes = await fetch(`http://localhost:8000/api/patients/${bestRaw.id}/`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (detailRes.ok) {
+        const detail = await detailRes.json();
+        return { existing: normalizePatient(detail), score: bestScore };
+      }
+    } catch (_) {}
+
+    // Fallback to list version
+    return { existing: normalizePatient(bestRaw), score: bestScore };
+  } catch (e) {
+    console.warn('duplicate lookup failed', e);
+    return null;
+  }
 }
 
 function CompletionBar({ label, pct }) {
@@ -56,6 +272,7 @@ export default function Page5() {
   const [checks, setChecks]       = useState({ c1: false, c2: false, c3: false });
   const [unchecked, setUnchecked] = useState([]);
   const [showSuccess, setShowSuccess] = useState(false);
+  const [merged, setMerged] = useState(false); // indicates if we updated existing
   const [saving, setSaving]       = useState(false);
   const [saveError, setSaveError] = useState('');
   const [createdDossier, setCreatedDossier] = useState('');
@@ -71,7 +288,112 @@ export default function Page5() {
 
   const toggleCheck = (key) => setChecks(prev => ({ ...prev, [key]: !prev[key] }));
 
-  // ── SAVE — envoie vraiment les données au backend ─────────────────────────
+  // Duplicate modal state
+  const [duplicateModal, setDuplicateModal] = useState(null);
+
+  // helper that performs the actual creation (called after duplicate check / confirm)
+  async function createPatientAndCancer(patientPayload, token, skipDuplicateCheck = false) {
+    try {
+      const patRes = await fetch('http://localhost:8000/api/patients/', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(patientPayload),
+      });
+
+      if (!patRes.ok) {
+        const err = await patRes.json();
+        console.error('Erreur patient:', err);
+
+        // Detect NIN duplicate — French ("existe déjà") OR English ("already exists")
+        const errMsg = JSON.stringify(err).toLowerCase();
+        const isNINDuplicate = !skipDuplicateCheck && (
+          errMsg.includes('national_id') ||
+          errMsg.includes('existe') ||
+          errMsg.includes('exist') ||
+          errMsg.includes('déjà') ||
+          errMsg.includes('deja') ||
+          errMsg.includes('unique')
+        );
+
+        if (isNINDuplicate && patientPayload.national_id) {
+          // Always try to open the modal — never show raw error for NIN conflict
+          try {
+            const existingRes = await fetch(
+              `http://localhost:8000/api/patients/?national_id=${encodeURIComponent(patientPayload.national_id)}`,
+              { headers: { Authorization: `Bearer ${token}` } }
+            );
+            if (existingRes.ok) {
+              const existingData = await existingRes.json();
+              const existingRaw = existingData.results?.[0] || existingData[0];
+              if (existingRaw) {
+                let fullExisting = existingRaw;
+                try {
+                  const detailRes = await fetch(
+                    `http://localhost:8000/api/patients/${existingRaw.id}/`,
+                    { headers: { Authorization: `Bearer ${token}` } }
+                  );
+                  if (detailRes.ok) fullExisting = await detailRes.json();
+                } catch (_) {}
+
+                const existing = normalizePatient(fullExisting);
+                const candidate = normalizePatient({
+                  ...data,
+                  first_name: data.prenom || data.first_name || '',
+                  last_name:  data.nom    || data.last_name  || '',
+                });
+                setDuplicateModal({ existing, candidate });
+                return null;  // stop here — modal handles the rest
+              }
+            }
+          } catch (fetchErr) {
+            console.warn('Could not fetch existing patient:', fetchErr);
+          }
+          // If fetch failed, show friendly message instead of raw error
+          setSaveError('Un patient avec ce NIN existe déjà. Veuillez vérifier.');
+          return null;
+        }
+
+        // Other errors (date, validation, etc.)
+        const msg = err.date_naissance?.[0] || err.detail || Object.values(err).flat()[0] || JSON.stringify(err);
+        setSaveError('Erreur : ' + msg);
+        return null;
+      }
+
+      const patient = await patRes.json();
+      setCreatedDossier(patient.numero_dossier || '');
+
+      // create cancer if applicable
+      if (data.organe) {
+        const cancerPayload = {
+          patient:         patient.id,
+          stade_clinique:  data.stade    || '',
+          tnm:             [data.tnmT, data.tnmN, data.tnmM].filter(Boolean).join(''),
+          grade:           data.grade    || '',
+          date_diagnostic: data.diagDate || null,
+        };
+
+        await fetch(`http://localhost:8000/api/patients/${patient.id}/cancers/`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify(cancerPayload),
+        });
+      }
+
+      return patient;
+    } catch (e) {
+      console.error(e);
+      setSaveError('Erreur réseau. Vérifiez que le serveur Django est lancé.');
+      return null;
+    }
+  }
+
+  // ── SAVE — envoie vraiment les données au backend (avec contrôle doublon) ──
   const handleSave = async () => {
     // 1. Vérifier les checkboxes
     const missing = Object.entries(checks).filter(([, v]) => !v).map(([k]) => k);
@@ -92,7 +414,6 @@ export default function Page5() {
         return;
       }
 
-      // ── 2. Créer le patient ──────────────────────────────────────
       const patientPayload = {
         first_name:     data.prenom        || '',
         last_name:      data.nom           || '',
@@ -102,53 +423,208 @@ export default function Page5() {
         national_id:    data.nin           || null,
         data_source:    'manual',
       };
+      // commune is free-text in form, not a FK integer — don't send to backend
 
-      const patRes = await fetch('http://localhost:8000/api/patients/', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify(patientPayload),
+      // build normalized candidate from full form data for similarity check
+      const candidate = normalizePatient({
+        ...data,
+        first_name: data.prenom || data.first_name || '',
+        last_name: data.nom || data.last_name || '',
       });
-
-      if (!patRes.ok) {
-        const err = await patRes.json();
-        console.error('Erreur patient:', err);
-        const msg = err.date_naissance?.[0] || err.national_id?.[0] || err.detail || JSON.stringify(err);
-        setSaveError('Erreur : ' + msg);
+      const dup = await findPossibleDuplicate(candidate, token);
+      if (dup) {
+        // show modal and abort save
+        setDuplicateModal({ existing: dup.existing, candidate });
         setSaving(false);
         return;
       }
 
-      const patient = await patRes.json();
-      setCreatedDossier(patient.numero_dossier || '');
-
-      // ── 3. Créer le cancer si organe renseigné ────────────────────
-      if (data.organe) {
-        const cancerPayload = {
-          patient:         patient.id,
-          stade_clinique:  data.stade    || '',
-          tnm:             [data.tnmT, data.tnmN, data.tnmM].filter(Boolean).join(''),
-          grade:           data.grade    || '',
-          date_diagnostic: data.diagDate || null,
-        };
-
-        await fetch(`http://localhost:8000/api/patients/${patient.id}/cancers/`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${token}`,
-          },
-          body: JSON.stringify(cancerPayload),
-        });
-      }
-
-      // ── 4. Succès ─────────────────────────────────────────────────
-      setShowSuccess(true);
+      // Try to create the patient
+      // If a duplicate is detected (national_id exists), the function will show the modal and return null
+      const created = await createPatientAndCancer(patientPayload, token);
+      if (created) setShowSuccess(true);
 
     } catch (err) {
       console.error(err);
+      setSaveError('Erreur réseau. Vérifiez que le serveur Django est lancé.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  // Handler when modal confirm: proceed with creation (force)
+  // helper to update an existing patient based on fusion data
+  async function mergePatientAndCancer(existingId, fusionData, token, candidateData) {
+    // ── 1. PATCH patient fields ───────────────────────────────────────────────
+    const nameParts = (fusionData.nom || '').trim().split(' ');
+    // Only send fields that don't require FK lookup
+    // commune requires integer PK — skip it to avoid 400 error
+    // (commune stays as-is on existing patient)
+    const payload = {
+      first_name:     nameParts[0] || '',
+      last_name:      nameParts.slice(1).join(' ') || '',
+      date_naissance: fusionData.dateNaissance || '',
+      phone:          fusionData.telephone || '',
+    };
+
+    // commune is a free-text field in the form (not an FK integer)
+    // → never send it in PATCH to avoid 400 "attendait clé primaire" error
+
+    console.log('[PATCH] payload:', JSON.stringify(payload));
+    console.log('[PATCH] to patient id:', existingId);
+    const res = await fetch(`http://localhost:8000/api/patients/${existingId}/`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify(payload),
+    });
+    if (!res.ok) {
+      const err = await res.json();
+      console.error('[PATCH] FAILED:', err);
+      throw new Error(JSON.stringify(err));
+    }
+    console.log('[PATCH] SUCCESS status:', res.status);
+    const updatedPatient = await res.json();
+
+    // ── 2. Merge cancers — fetch existing, add missing ────────────────────────
+    if (fusionData.cancers && fusionData.cancers.length > 0) {
+      try {
+        const cRes = await fetch(`http://localhost:8000/api/patients/${existingId}/cancers/`,
+          { headers: { Authorization: `Bearer ${token}` } });
+        if (cRes.ok) {
+          const existingCancers = await cRes.json();
+          // Existing cancer names (normalized)
+          const existingNames = existingCancers.map(c =>
+            (c.cancer_type_name || '').toLowerCase().trim()
+          );
+          for (const label of fusionData.cancers) {
+            // label may be "Leucémie (Stade II)" — extract name part
+            const namePart = label.replace(/\s*\(.*\)$/, '').toLowerCase().trim();
+            if (existingNames.includes(namePart)) continue; // already exists
+
+            // Find matching CancerType id from candidateData raw cancers
+            const matchRaw = (candidateData?._rawCancers || []).find(c => {
+              const n = (c.cancer_type_name || c.organe || '').toLowerCase().trim();
+              return n === namePart;
+            });
+            if (matchRaw?.cancer_type) {
+              await fetch(`http://localhost:8000/api/patients/${existingId}/cancers/`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+                body: JSON.stringify({
+                  cancer_type:     matchRaw.cancer_type,
+                  stade_clinique:  matchRaw.stade_clinique || '',
+                  tnm:             matchRaw.tnm || '',
+                  grade:           matchRaw.grade || '',
+                  date_diagnostic: matchRaw.date_diagnostic || null,
+                }),
+              });
+            }
+          }
+        }
+      } catch(e) { console.warn('Cancer merge warning:', e); }
+    }
+
+    return updatedPatient;
+  }
+
+  // ── Helper: convert DD/MM/YYYY → YYYY-MM-DD for API ─────────────────────────
+  function toISODate(str) {
+    if (!str) return '';
+    // Already ISO
+    if (/^\d{4}-\d{2}-\d{2}/.test(str)) return str.split('T')[0];
+    // DD/MM/YYYY
+    const m = str.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+    if (m) return `${m[3]}-${m[2].padStart(2,'0')}-${m[1].padStart(2,'0')}`;
+    return str;
+  }
+
+  // action: 'fusionner' | 'garder_separe'
+  const handleModalConfirm = async (fusionData, note, existingId, action = 'fusionner') => {
+    // Save modal data BEFORE closing (duplicateModal will be null after)
+    const savedModal = duplicateModal;
+    setDuplicateModal(null);
+
+    // ── Garder séparément → force create new patient ──────────────────────────
+    if (action === 'garder_separe') {
+      setSaving(true);
+      setSaveError('');
+      try {
+        const token = localStorage.getItem('access_token');
+        if (!token) { setSaveError('Session expirée.'); setSaving(false); return; }
+        const patientPayload = {
+          first_name:     data.prenom     || '',
+          last_name:      data.nom        || '',
+          date_naissance: data.dob        || '',
+          sexe:           data.sexe?.includes('Masculin') ? 'M' : 'F',
+          phone:          data.tel        || '',
+          national_id:    null,
+          data_source:    'manual',
+        };
+        const created = await createPatientAndCancer(patientPayload, token, true);
+        if (created) { setShowSuccess(true); setCreatedDossier(created.numero_dossier || ''); }
+      } catch(e) {
+        setSaveError('Erreur réseau.');
+      } finally { setSaving(false); }
+      return;
+    }
+
+    // ── Fusionner → PATCH existing patient ────────────────────────────────────
+    setSaving(true);
+    setSaveError('');
+    try {
+      const token = localStorage.getItem('access_token');
+      if (!token) { setSaveError('Session expirée.'); setSaving(false); return; }
+
+      console.log('[MERGE] existingId:', existingId);
+      console.log('[MERGE] fusionData.dateNaissance:', fusionData.dateNaissance);
+      console.log('[MERGE] savedModal:', savedModal);
+
+      // Convert display date → ISO for API
+      const fusionDataFixed = {
+        ...fusionData,
+        dateNaissance: toISODate(fusionData.dateNaissance),
+      };
+
+      console.log('[MERGE] fusionDataFixed.dateNaissance:', fusionDataFixed.dateNaissance);
+      console.log('[MERGE] PATCH URL: /api/patients/' + existingId + '/');
+
+      const updated = await mergePatientAndCancer(existingId, fusionDataFixed, token, {
+        _rawCancers: [],
+      });
+      if (updated) {
+        setMerged(true);
+        const nameParts = (fusionDataFixed.nom || '').trim().split(' ');
+        update({
+          prenom:      nameParts[0]                  || data.prenom,
+          nom:         nameParts.slice(1).join(' ')  || data.nom,
+          dob:         fusionDataFixed.dateNaissance || data.dob,
+          tel:         fusionDataFixed.telephone     || data.tel,
+          wilaya:      fusionDataFixed.wilaya        || data.wilaya,
+          commune:     fusionDataFixed.commune       || data.commune,
+          medecin:     fusionDataFixed.medecin       || data.medecin,
+        });
+
+        // ── If candidate was a pre-existing DB patient (has an id different
+        // from existingId), DELETE it so only one record remains ────────────
+        const candidateId = savedModal?.candidate?.id;
+        if (candidateId && candidateId !== existingId) {
+          try {
+            await fetch(`http://localhost:8000/api/patients/${candidateId}/`, {
+              method: 'DELETE',
+              headers: { Authorization: `Bearer ${token}` },
+            });
+            console.log('[MERGE] Deleted duplicate candidate id:', candidateId);
+          } catch(delErr) {
+            console.warn('[MERGE] Could not delete candidate:', delErr);
+          }
+        }
+
+        console.log('[MERGE] Fusion OK — patient', existingId, 'updated:', updated.numero_dossier);
+        setShowSuccess(true);
+        setCreatedDossier(updated.numero_dossier || updated.id || '');
+      }
+    } catch (e) {
+      console.error(e);
       setSaveError('Erreur réseau. Vérifiez que le serveur Django est lancé.');
     } finally {
       setSaving(false);
@@ -162,9 +638,9 @@ export default function Page5() {
         <div className="overlay">
           <div className="success-box">
             <div className="suc-icon">✓</div>
-            <div className="suc-title">Patient enregistré !</div>
+            <div className="suc-title">Patient {merged ? 'mis à jour' : 'enregistré'} !</div>
             <div className="suc-sub">
-              Le dossier de <strong>{fullName}</strong> a été créé avec succès.
+              Le dossier de <strong>{fullName}</strong> a été {merged ? 'fusionné/mis à jour' : 'créé'} avec succès.
             </div>
             {createdDossier && <div className="suc-num">{createdDossier}</div>}
             <div style={{ display: 'flex', gap: 10, justifyContent: 'center', flexWrap: 'wrap' }}>
@@ -347,6 +823,18 @@ export default function Page5() {
         nextLabel={saving ? '⏳ Enregistrement…' : '✓ Enregistrer le patient'}
         nextClass="btn-success"
       />
+
+      {/* Duplicate modal */}
+      {duplicateModal && (
+        <DuplicateDetectionModal
+          patientExistant={duplicateModal.existing}
+          patientNouveau={duplicateModal.candidate}
+          onClose={() => setDuplicateModal(null)}
+          onConfirm={(fusionData, note, existingId, action) =>
+            handleModalConfirm(fusionData, note, existingId, action)
+          }
+        />
+      )}
     </Layout>
   );
 }
