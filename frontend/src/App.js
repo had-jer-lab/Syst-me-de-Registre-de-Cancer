@@ -14,6 +14,7 @@ import Page2 from './pages/Page2';
 import Page3 from './pages/Page3';
 import Page4 from './pages/Page4';
 import Page5 from './pages/Page5';
+import Statistics from './pages/Statistics';
 
 
 export default function App() {
@@ -39,6 +40,7 @@ export default function App() {
           <Route path="/page4"     element={<Page4 />} />
           <Route path="/page5"     element={<Page5 />} />
           <Route path="/patient/:id/edit" element={<EditPatient />} />
+          <Route path="/statistics" element={<Statistics />} />
 
 
           {/* Fallback */}

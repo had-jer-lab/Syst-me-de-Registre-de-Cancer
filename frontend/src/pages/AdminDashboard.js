@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
+import StatisticsEditor from './Statistics';
 
 // ─── API Helper ───────────────────────────────────────────────────────────────
 const API = 'http://localhost:8000/api/auth';
@@ -574,6 +575,7 @@ export default function AdminDashboard() {
     { id: 'overview', icon: '🏠', label: 'Vue d\'ensemble' },
     { id: 'users',    icon: '👤', label: 'Mes utilisateurs' },
     { id: 'logs',     icon: '📋', label: 'Journal' },
+    { id: 'statistics',  icon: '📊', label: 'Statistiques' },
   ];
 
   const handleLogout = () => {
@@ -628,6 +630,7 @@ export default function AdminDashboard() {
               {page === 'overview' && 'Tableau de bord Admin'}
               {page === 'users'    && 'Gestion des utilisateurs'}
               {page === 'logs'     && 'Journal d\'activité'}
+              {page === 'statistics' && 'Statistiques'}
             </div>
             <div style={s.topbarSub}>Registre National du Cancer — Panel Administrateur</div>
           </div>
@@ -647,6 +650,7 @@ export default function AdminDashboard() {
         {page === 'overview' && <OverviewPage usersCount={usersCount} logsCount={logsCount} setPage={setPage} />}
         {page === 'users'    && <UsersPage search={search} />}
         {page === 'logs'     && <LogsPage search={search} />}
+        {page === 'statistics' && <StatisticsEditor />}
       </div>
     </div>
   );
