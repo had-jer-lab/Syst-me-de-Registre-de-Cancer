@@ -8,8 +8,6 @@ from io import BytesIO
 
 # ✅ Import depuis patients
 from patients.models import Cancer, Patient
-from .models import Notification
-from .models import User
 from .models import (
     RcpMeeting, RcpParticipant, RcpDiscussion,
     RcpVote, RcpDecision, RcpRapport, Notification
@@ -24,13 +22,10 @@ User = get_user_model()
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def mes_patients(request):
-    # 🔥 نعرض المرضى الذين أنشأهم الطبيب 
+    patients = Patient.objects.filter(
+        created_by=request.user
+    ).order_by('-created_at')
 
-    patients = Patient.objects.filter( 
-
-        created_by=request.user 
-
-    ).order_by('-created_at') 
     data = []
     for p in patients:
         cancer = p.cancers.order_by('-created_at').first()
@@ -49,12 +44,11 @@ def mes_patients(request):
 
 
 # ══════════════════════════════════════════════
-# 🟢 CANCERS D'UN PATIENT — اختيار عند إنشاء RCP
+# 🟢 CANCERS D'UN PATIENT
 # ══════════════════════════════════════════════
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def patient_cancers(request, patient_id):
-    """يرجع كل سرطانات مريض — باش تختاري واحد عند إنشاء RCP"""
     patient = get_object_or_404(Patient, id=patient_id)
     cancers = patient.cancers.select_related('cancer_type').order_by('-created_at')
 
@@ -81,12 +75,11 @@ def patient_cancers(request, patient_id):
 
 
 # ══════════════════════════════════════════════
-# 🟢 LISTE MÉDECINS — للدعوة
+# 🟢 LISTE MÉDECINS
 # ══════════════════════════════════════════════
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def list_medecins(request):
-    """كل الأطباء — باش تدعوهم في الـ RCP"""
     users = User.objects.filter(
         role__in=['medecin']
     ).exclude(id=request.user.id)
@@ -94,11 +87,11 @@ def list_medecins(request):
     data = []
     for u in users:
         data.append({
-            "id":       u.id,
-            "name":     f"{u.prenom} {u.nom}".strip(),
-            "email":    u.email,
-            "role":     u.role,
-            "specialite": u.specialite,
+            "id":            u.id,
+            "name":          f"{u.prenom} {u.nom}".strip(),
+            "email":         u.email,
+            "role":          u.role,
+            "specialite":    u.specialite,
             "etablissement": u.etablissement,
         })
     return Response(data)
@@ -115,8 +108,7 @@ def create_rcp(request):
 
     cancer = get_object_or_404(Cancer, id=request.data.get('cancer_id'))
 
-    # ✅ Parse meeting_datetime safely
-    raw_dt = request.data.get('meeting_datetime')
+    raw_dt     = request.data.get('meeting_datetime')
     meeting_dt = parse_datetime(str(raw_dt)) if raw_dt else None
     if meeting_dt and timezone.is_naive(meeting_dt):
         meeting_dt = timezone.make_aware(meeting_dt)
@@ -129,8 +121,9 @@ def create_rcp(request):
         presentation_reason=request.data.get('presentation_reason', ''),
         clinical_summary=request.data.get('clinical_summary', ''),
     )
-    rcp.refresh_from_db()  # ✅ garantir que meeting_datetime est un objet datetime
+    rcp.refresh_from_db()
 
+    # Le créateur est automatiquement participant
     RcpParticipant.objects.create(
         rcp_meeting=rcp,
         user=request.user,
@@ -150,7 +143,7 @@ def create_rcp(request):
             Notification.objects.create(
                 user=user,
                 rcp_meeting=rcp,
-                message=f"Nouveau RCP pour {cancer.patient.full_name} - le {dt_str}"
+                message=f"Nouveau RCP pour {cancer.patient.full_name} — le {dt_str}"
             )
         except User.DoesNotExist:
             pass
@@ -159,36 +152,48 @@ def create_rcp(request):
 
 
 # ══════════════════════════════════════════════
-# 🟢 DÉMARRER RCP — ▶ زر بدء الاجتماع
+# 🟢 DÉMARRER RCP
 # ══════════════════════════════════════════════
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def start_rcp(request, rcp_id):
     """
-    فقط المنشئ يقدر يضغط ▶ Démarrer
-    يبدل status من scheduled → ongoing
-    ويبعث إشعار لكل المشاركين
+    🔒 Règle de verrouillage :
+    - Seul le créateur peut démarrer la réunion
+    - La réunion doit être à l'heure prévue (ou passée) — vérification côté backend
+    - Quand il démarre, tous les participants reçoivent une notification pour ouvrir la discussion
     """
+    from django.utils import timezone
+
     rcp = get_object_or_404(RcpMeeting, id=rcp_id)
 
-    # فقط المنشئ
+    # Seul le créateur
     if rcp.created_by != request.user:
         return Response({"error": "Seul le créateur peut démarrer la réunion"}, status=403)
 
-    # لازم تكون scheduled
+    # Doit être scheduled
     if rcp.status != 'scheduled':
         return Response({"error": f"La réunion est déjà {rcp.status}"}, status=400)
+
+    # 🔒 Vérification : on ne peut pas démarrer avant l'heure prévue
+    now = timezone.now()
+    if rcp.meeting_datetime and rcp.meeting_datetime > now:
+        remaining = rcp.meeting_datetime - now
+        minutes   = int(remaining.total_seconds() / 60)
+        return Response({
+            "error": f"La réunion ne peut pas démarrer avant l'heure prévue (encore {minutes} min)"
+        }, status=403)
 
     rcp.status = 'ongoing'
     rcp.save()
 
-    # 🔔 إشعار لكل المشاركين ما عدا المنشئ
+    # 🔔 Notifier tous les participants (sauf le créateur)
     for participant in rcp.participants.select_related('user'):
         if participant.user != request.user:
             Notification.objects.create(
                 user=participant.user,
                 rcp_meeting=rcp,
-                message=f"🟢 RCP démarrée maintenant — {rcp.cancer.patient.full_name} — cliquez pour rejoindre"
+                message=f"🟢 RCP démarrée maintenant — {rcp.cancer.patient.full_name} — cliquez pour rejoindre la discussion"
             )
 
     return Response({"message": "RCP démarrée", "status": "ongoing"})
@@ -206,7 +211,7 @@ def my_rcp_history(request):
 
     data = []
     for m in meetings:
-        patient = m.cancer.patient
+        patient       = m.cancer.patient
         decision_text = None
         if hasattr(m, 'decision'):
             decision_text = m.decision.decision_text
@@ -232,33 +237,38 @@ def my_rcp_history(request):
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def rcp_details(request, rcp_id):
-    rcp = get_object_or_404(RcpMeeting, id=rcp_id)
+    rcp     = get_object_or_404(RcpMeeting, id=rcp_id)
     patient = rcp.cancer.patient
 
     participants = []
     for p in rcp.participants.select_related('user'):
         participants.append({
-            "id":       p.user.id,
-            "name":     f"{p.user.prenom} {p.user.nom}".strip(),
-            "role":     p.role_in_rcp,
-            "email":    p.user.email,
+            "id":    p.user.id,
+            "name":  f"{p.user.prenom} {p.user.nom}".strip(),
+            "role":  p.role_in_rcp,
+            "email": p.user.email,
         })
 
     messages = []
     for m in rcp.messages.select_related('user').order_by('created_at'):
-        messages.append({
-            "id":      m.id,
-            "user":    f"{m.user.prenom} {m.user.nom}".strip(),
-            "user_id": m.user.id,
-            "message": m.message,
-            "time":    m.created_at.strftime("%H:%M"),
-            "date":    m.created_at.strftime("%d/%m/%Y"),
-        })
+        msg_data = {
+            "id":       m.id,
+            "user":     f"{m.user.prenom} {m.user.nom}".strip(),
+            "user_id":  m.user.id,
+            "message":  m.message,
+            "msg_type": m.msg_type,
+            "time":     m.created_at.strftime("%H:%M"),
+            "date":     m.created_at.strftime("%d/%m/%Y"),
+        }
+        # Inclure l'URL audio si c'est un message vocal
+        if m.msg_type == 'voice' and m.audio_file:
+            msg_data["audio_url"] = request.build_absolute_uri(m.audio_file.url)
+            msg_data["duration"]  = _fmt_duration(m.duration or 0)
+        messages.append(msg_data)
 
-    # ── Vote details ────────────────────────────────────────────
+    # ── Vote details ─────────────────────────────────────────────
     is_creator = rcp.created_by == request.user
 
-    # من صوّت وبماذا — للمنشئ فقط
     votes = []
     if is_creator:
         for v in rcp.votes.select_related('user'):
@@ -267,9 +277,8 @@ def rcp_details(request, rcp_id):
                 "vote": v.vote_value,
             })
 
-    # صوت المستخدم الحالي
-    my_vote = None
-    user_vote = rcp.votes.filter(user=request.user).first()
+    my_vote    = None
+    user_vote  = rcp.votes.filter(user=request.user).first()
     if user_vote:
         my_vote = user_vote.vote_value
 
@@ -281,8 +290,11 @@ def rcp_details(request, rcp_id):
         "voted":   rcp.votes.count(),
     }
 
-    decision    = None
-    rapport_url = None
+    decision           = None
+    treatment_protocol = ''
+    signature_code     = ''
+    rapport_url        = None
+
     if hasattr(rcp, 'decision'):
         decision           = rcp.decision.decision_text
         treatment_protocol = rcp.decision.treatment_protocol
@@ -291,37 +303,43 @@ def rcp_details(request, rcp_id):
         rapport_url = request.build_absolute_uri(rcp.rapport.file.url)
 
     return Response({
-        "rcp_id":          rcp.id,
-        "status":          rcp.status,
-        "date":            rcp.meeting_datetime,
-        "is_creator":      is_creator,
-        "patient":         patient.full_name,
-        "patient_id":      patient.id,
-        "age":             patient.age,
-        "numero_dossier":  patient.numero_dossier,
-        "stade":           rcp.cancer.stade_clinique,
-        "tnm":             rcp.cancer.tnm,
-        "cancer_type":     str(rcp.cancer.cancer_type) if rcp.cancer.cancer_type else "",
-        "participants":    participants,
-        "messages":        messages,
-        "votes":           votes,
-        "vote_summary":    vote_summary,
-        "vote_proposal":   rcp.vote_proposal or '',
-        "vote_open":       rcp.vote_open,
-        "my_vote":         my_vote,
+        "rcp_id":             rcp.id,
+        "status":             rcp.status,
+        "date":               rcp.meeting_datetime,
+        "is_creator":         is_creator,
+        "patient":            patient.full_name,
+        "patient_id":         patient.id,
+        "age":                patient.age,
+        "numero_dossier":     patient.numero_dossier,
+        "stade":              rcp.cancer.stade_clinique,
+        "tnm":                rcp.cancer.tnm,
+        "cancer_type":        str(rcp.cancer.cancer_type) if rcp.cancer.cancer_type else "",
+        "participants":       participants,
+        "messages":           messages,
+        "votes":              votes,
+        "vote_summary":       vote_summary,
+        "vote_proposal":      rcp.vote_proposal or '',
+        "vote_open":          rcp.vote_open,
+        "my_vote":            my_vote,
         "decision":           decision,
-        "treatment_protocol": treatment_protocol if hasattr(rcp, 'decision') else '',
-        "signature_code":     signature_code if hasattr(rcp, 'decision') else '',
-        "rapport_url":     rapport_url,
+        "treatment_protocol": treatment_protocol,
+        "signature_code":     signature_code,
+        "rapport_url":        rapport_url,
     })
 
 
 # ══════════════════════════════════════════════
-# 🟢 CHAT
+# 🟢 CHAT — Texte + Vocal
 # ══════════════════════════════════════════════
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def add_message(request, rcp_id):
+    """
+    Accepte deux types de messages :
+    • Texte  : Content-Type: application/json       → { "message": "..." }
+    • Vocal  : Content-Type: multipart/form-data    → audio (file) + duration (int)
+    DRF détecte automatiquement le parser selon le Content-Type.
+    """
     rcp = get_object_or_404(RcpMeeting, id=rcp_id)
 
     if rcp.status == 'scheduled':
@@ -330,31 +348,95 @@ def add_message(request, rcp_id):
     if rcp.status == 'closed':
         return Response({"error": "La réunion est fermée"}, status=403)
 
-    msg = RcpDiscussion.objects.create(
-        rcp_meeting=rcp,
-        user=request.user,
-        message=request.data.get('message', '').strip()
-    )
+    # ── Détecter le type selon la présence d'un fichier audio ──────────────
+    audio_file = request.FILES.get('audio')
 
-    return Response({
-        "id":      msg.id,
-        "user":    f"{request.user.prenom} {request.user.nom}".strip(),
-        "user_id": request.user.id,
-        "message": msg.message,
-        "time":    msg.created_at.strftime("%H:%M"),
-        "date":    msg.created_at.strftime("%d/%m/%Y"),
-    })
+    if audio_file:
+        # ─── 🎤 Message Vocal ────────────────────────────────────────────────
+        duration = 0
+        try:
+            duration = int(request.data.get('duration', 0))
+        except (ValueError, TypeError):
+            duration = 0
+
+        msg = RcpDiscussion.objects.create(
+            rcp_meeting=rcp,
+            user=request.user,
+            message='',
+            msg_type='voice',
+            duration=duration,
+        )
+        # Déduire l'extension depuis le nom ou le content-type du fichier
+        content_type = audio_file.content_type or ''
+        if 'ogg' in content_type:
+            ext = 'ogg'
+        elif 'mp4' in content_type or 'aac' in content_type:
+            ext = 'm4a'
+        else:
+            ext = 'webm'
+
+        name = f"voice_{rcp.id}_{msg.id}.{ext}"
+        msg.audio_file.save(name, audio_file, save=True)
+
+        resp = {
+            "id":        msg.id,
+            "user":      f"{request.user.prenom} {request.user.nom}".strip(),
+            "user_id":   request.user.id,
+            "message":   '',
+            "msg_type":  'voice',
+            "audio_url": request.build_absolute_uri(msg.audio_file.url),
+            "duration":  _fmt_duration(duration),
+            "time":      msg.created_at.strftime("%H:%M"),
+            "date":      msg.created_at.strftime("%d/%m/%Y"),
+        }
+        notif_msg = f"🎤 Message vocal de {request.user.prenom} {request.user.nom}".strip()
+
+    else:
+        # ─── 💬 Message Texte (JSON) ─────────────────────────────────────────
+        text = request.data.get('message', '').strip()
+        if not text:
+            return Response({"error": "Message vide"}, status=400)
+
+        msg = RcpDiscussion.objects.create(
+            rcp_meeting=rcp,
+            user=request.user,
+            message=text,
+            msg_type='text',
+        )
+        resp = {
+            "id":       msg.id,
+            "user":     f"{request.user.prenom} {request.user.nom}".strip(),
+            "user_id":  request.user.id,
+            "message":  msg.message,
+            "msg_type": 'text',
+            "time":     msg.created_at.strftime("%H:%M"),
+            "date":     msg.created_at.strftime("%d/%m/%Y"),
+        }
+        sender_name = f"{request.user.prenom} {request.user.nom}".strip()
+        notif_msg   = f"💬 {sender_name}: {text[:60]}"
+
+    # 🔔 Notifier les autres participants
+    for participant in rcp.participants.select_related('user'):
+        if participant.user != request.user:
+            Notification.objects.create(
+                user=participant.user,
+                rcp_meeting=rcp,
+                message=notif_msg
+            )
+
+    return Response(resp, status=201)
 
 
 # ══════════════════════════════════════════════
-# 🟢 VOTE
+# 🟢 SET VOTE PROPOSAL (créateur)
 # ══════════════════════════════════════════════
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def set_vote_proposal(request, rcp_id):
     """
-    المنشئ يختار رسالة أو يكتب اقتراح ويفتح التصويت.
-    يحذف الأصوات القديمة ويبدأ من جديد.
+    Le créateur soumet une proposition au vote.
+    Peut provenir d'un seul message ou d'une sélection multiple (multi-vote).
+    Le frontend envoie { "proposal": "texte\n— autre texte" }
     """
     rcp = get_object_or_404(RcpMeeting, id=rcp_id)
 
@@ -368,28 +450,30 @@ def set_vote_proposal(request, rcp_id):
     if not proposal:
         return Response({"error": "Proposition requise"}, status=400)
 
-    # حذف الأصوات القديمة وفتح تصويت جديد
+    # Réinitialiser les anciens votes et ouvrir un nouveau vote
     rcp.votes.all().delete()
     rcp.vote_proposal = proposal
     rcp.vote_open     = True
     rcp.save()
 
-    # إشعار للمشاركين
+    # 🔔 Notifier tous les participants
     for participant in rcp.participants.select_related('user'):
         if participant.user != request.user:
             Notification.objects.create(
                 user=participant.user,
                 rcp_meeting=rcp,
-                message=f"[VOTE] Nouveau vote ouvert: {proposal[:60]}"
+                message=f"🗳️ Vote ouvert : {proposal[:80]}"
             )
 
     return Response({"ok": True, "proposal": proposal})
 
 
+# ══════════════════════════════════════════════
+# 🟢 CLOSE VOTE (créateur)
+# ══════════════════════════════════════════════
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def close_vote(request, rcp_id):
-    """المنشئ يغلق التصويت"""
     rcp = get_object_or_404(RcpMeeting, id=rcp_id)
     if rcp.created_by != request.user:
         return Response({"error": "Seul le créateur peut fermer le vote"}, status=403)
@@ -398,12 +482,14 @@ def close_vote(request, rcp_id):
     return Response({"ok": True})
 
 
+# ══════════════════════════════════════════════
+# 🟢 VOTE (participant)
+# ══════════════════════════════════════════════
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def vote(request, rcp_id):
     rcp = get_object_or_404(RcpMeeting, id=rcp_id)
 
-    # ✅ التصويت يجب أن يكون مفتوحاً
     if not rcp.vote_open:
         return Response({"error": "Aucun vote en cours"}, status=400)
 
@@ -411,9 +497,8 @@ def vote(request, rcp_id):
     if vote_value not in ['approve', 'reject', 'abstain']:
         return Response({"error": "Vote invalide"}, status=400)
 
-    # ✅ منع التصويت مرتين
-    already_voted = RcpVote.objects.filter(rcp_meeting=rcp, user=request.user).exists()
-    if already_voted:
+    # Empêcher de voter deux fois
+    if RcpVote.objects.filter(rcp_meeting=rcp, user=request.user).exists():
         return Response({"error": "Vous avez déjà voté"}, status=400)
 
     RcpVote.objects.create(
@@ -434,14 +519,13 @@ def vote(request, rcp_id):
 
 
 # ══════════════════════════════════════════════
-# 🟢 VALIDATE + PDF
+# 🟢 VALIDATE DECISION + PDF
 # ══════════════════════════════════════════════
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def validate_decision(request, rcp_id):
     rcp = get_object_or_404(RcpMeeting, id=rcp_id)
 
-    # ✅ Seul le créateur peut valider la décision
     if rcp.created_by != request.user:
         return Response({"error": "Seul le créateur de la RCP peut valider la décision finale."}, status=403)
 
@@ -451,11 +535,11 @@ def validate_decision(request, rcp_id):
     import hashlib, datetime
     decision_text      = request.data.get('decision_text', '').strip()
     treatment_protocol = request.data.get('treatment_protocol', '').strip()
+
     if not decision_text:
         return Response({"error": "Décision requise"}, status=400)
 
-    # Génération du code de signature numérique
-    raw = f"{rcp.id}-{request.user.email}-{decision_text[:30]}-{datetime.datetime.now().isoformat()}"
+    raw            = f"{rcp.id}-{request.user.email}-{decision_text[:30]}-{datetime.datetime.now().isoformat()}"
     signature_code = hashlib.sha256(raw.encode()).hexdigest()[:16].upper()
 
     RcpDecision.objects.update_or_create(
@@ -476,12 +560,13 @@ def validate_decision(request, rcp_id):
     except Exception as e:
         return Response({"message": "Décision validée, erreur PDF", "error": str(e)}, status=207)
 
+    # 🔔 Notifier les participants de la décision finale
     for participant in rcp.participants.select_related('user'):
         if participant.user != request.user:
             Notification.objects.create(
                 user=participant.user,
                 rcp_meeting=rcp,
-                message=f"Décision validée pour {rcp.cancer.patient.full_name}: {decision_text[:80]}"
+                message=f"✅ Décision validée pour {rcp.cancer.patient.full_name} : {decision_text[:80]}"
             )
 
     return Response({"message": "RCP clôturée, rapport généré"})
@@ -494,10 +579,8 @@ def validate_decision(request, rcp_id):
 @permission_classes([IsAuthenticated])
 def download_rapport(request, rcp_id):
     rcp = get_object_or_404(RcpMeeting, id=rcp_id)
-
     if not hasattr(rcp, 'rapport'):
         return Response({"error": "Rapport non disponible"}, status=404)
-
     return Response({"url": request.build_absolute_uri(rcp.rapport.file.url)})
 
 
@@ -527,28 +610,46 @@ def verify_rcp(request, rcp_id):
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def check_pending_meetings(request):
+    """
+    يفحص الـ RCP المجدولة التي حان موعدها.
+    يرسل إشعار [RAPPEL] للمنشئ ليضغط ▶ Démarrer.
+    لا يفتح المناقشة تلقائياً — القرار للمنشئ فقط.
+    """
     from django.utils import timezone
     now = timezone.now()
+
     pending = RcpMeeting.objects.filter(
         status='scheduled',
         meeting_datetime__lte=now,
     ).select_related('cancer__patient', 'created_by')
+
     notified_count = 0
     for rcp in pending:
         patient_name = rcp.cancer.patient.full_name
-        dt_str = rcp.meeting_datetime.strftime('%d/%m/%Y a %H:%M')
+        dt_str       = rcp.meeting_datetime.strftime('%d/%m/%Y à %H:%M')
+
         for participant in rcp.participants.select_related('user'):
             user = participant.user
+
+            # Éviter les doublons de notification RAPPEL
             already = Notification.objects.filter(
                 user=user, rcp_meeting=rcp, message__startswith="[RAPPEL]"
             ).exists()
+
             if not already:
                 if user == rcp.created_by:
-                    msg = f"[RAPPEL] Votre RCP pour {patient_name} ({dt_str}) a commence. Veuillez demarrer la reunion."
+                    msg = (
+                        f"[RAPPEL] ⏰ Votre RCP pour {patient_name} ({dt_str}) "
+                        f"a commencé. Veuillez démarrer la réunion."
+                    )
                 else:
-                    msg = f"[RAPPEL] La RCP pour {patient_name} ({dt_str}) a commence. En attente du demarrage."
+                    msg = (
+                        f"[RAPPEL] ⏰ La RCP pour {patient_name} ({dt_str}) "
+                        f"a commencé. En attente du démarrage par le responsable."
+                    )
                 Notification.objects.create(user=user, rcp_meeting=rcp, message=msg)
                 notified_count += 1
+
     return Response({"checked": pending.count(), "notified": notified_count})
 
 
@@ -582,8 +683,14 @@ def mark_notification_read(request, notif_id):
 
 
 # ══════════════════════════════════════════════
-# 🔒 HELPER — PDF
+# 🔒 HELPERS
 # ══════════════════════════════════════════════
+def _fmt_duration(seconds):
+    """Convertit des secondes en mm:ss"""
+    s = int(seconds)
+    return f"{s // 60}:{str(s % 60).padStart(2, '0')}" if False else f"{s // 60}:{s % 60:02d}"
+
+
 def _generate_rapport(rcp):
     try:
         from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Image as RLImage, Table, TableStyle
@@ -597,34 +704,22 @@ def _generate_rapport(rcp):
     except ImportError:
         raise Exception("Installer: pip install reportlab qrcode[pil]")
 
-    # ✅ Enregistrer une police Unicode selon l'OS
+    # Enregistrer une police Unicode selon l'OS
     if platform.system() == 'Windows':
-        font_paths = [
-            r'C:\Windows\Fonts\arial.ttf',
-            r'C:\Windows\Fonts\calibri.ttf',
-            r'C:\Windows\Fonts\tahoma.ttf',
-        ]
-        font_bold_paths = [
-            r'C:\Windows\Fonts\arialbd.ttf',
-            r'C:\Windows\Fonts\calibrib.ttf',
-            r'C:\Windows\Fonts\tahomabd.ttf',
-        ]
+        font_paths      = [r'C:\Windows\Fonts\arial.ttf',    r'C:\Windows\Fonts\calibri.ttf']
+        font_bold_paths = [r'C:\Windows\Fonts\arialbd.ttf',  r'C:\Windows\Fonts\calibrib.ttf']
     else:
-        font_paths = [
-            '/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf',
-            '/usr/share/fonts/truetype/freefont/FreeSans.ttf',
-        ]
-        font_bold_paths = [
-            '/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf',
-            '/usr/share/fonts/truetype/freefont/FreeSansBold.ttf',
-        ]
+        font_paths      = ['/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf',
+                           '/usr/share/fonts/truetype/freefont/FreeSans.ttf']
+        font_bold_paths = ['/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf',
+                           '/usr/share/fonts/truetype/freefont/FreeSansBold.ttf']
 
     FONT_NAME = 'Helvetica'
     FONT_BOLD = 'Helvetica-Bold'
     for fp, fb in zip(font_paths, font_bold_paths):
         if os.path.exists(fp) and os.path.exists(fb):
             try:
-                pdfmetrics.registerFont(TTFont('UniFont',     fp))
+                pdfmetrics.registerFont(TTFont('UniFont',      fp))
                 pdfmetrics.registerFont(TTFont('UniFont-Bold', fb))
                 FONT_NAME = 'UniFont'
                 FONT_BOLD = 'UniFont-Bold'
@@ -632,20 +727,19 @@ def _generate_rapport(rcp):
                 pass
             break
 
-    buffer = BytesIO()
-    doc    = SimpleDocTemplate(buffer, pagesize=A4, topMargin=40, bottomMargin=40)
-    styles = getSampleStyleSheet()
+    buffer  = BytesIO()
+    doc     = SimpleDocTemplate(buffer, pagesize=A4, topMargin=40, bottomMargin=40)
+    styles  = getSampleStyleSheet()
 
-    # Override all styles to use Unicode font
     for s in styles.byName.values():
         s.fontName = FONT_NAME
 
     elements = []
-    patient = rcp.cancer.patient
+    patient  = rcp.cancer.patient
 
     title_style = ParagraphStyle('title', parent=styles['Heading1'], fontSize=16,
-                                  fontName=FONT_BOLD,
-                                  textColor=colors.HexColor('#1a2f6b'), spaceAfter=6)
+                                 fontName=FONT_BOLD,
+                                 textColor=colors.HexColor('#1a2f6b'), spaceAfter=6)
     elements.append(Paragraph("COMPTE RENDU — RÉUNION DE CONCERTATION PLURIDISCIPLINAIRE", title_style))
     elements.append(Spacer(1, 10))
 
@@ -678,44 +772,33 @@ def _generate_rapport(rcp):
     reject  = rcp.votes.filter(vote_value='reject').count()
     abstain = rcp.votes.filter(vote_value='abstain').count()
     elements.append(Paragraph("Résultats du Vote", styles['Heading2']))
-    elements.append(Paragraph(f"Approuvé: {approve}   Rejeté: {reject}   Abstention: {abstain}", styles['Normal']))
+    elements.append(Paragraph(f"Approuvé : {approve}   Rejeté : {reject}   Abstention : {abstain}", styles['Normal']))
     elements.append(Spacer(1, 12))
 
     if hasattr(rcp, 'decision'):
         dec = rcp.decision
 
-        # ── Section Décision ──────────────────────────────────────
         elements.append(Paragraph("Décision Finale", styles['Heading2']))
         elements.append(Paragraph(dec.decision_text, styles['Normal']))
         elements.append(Spacer(1, 12))
 
-        # ── Section Protocole de Traitement ───────────────────────
         if dec.treatment_protocol:
             elements.append(Paragraph("Protocole de Traitement", styles['Heading2']))
-            protocol_style = ParagraphStyle('protocol', parent=styles['Normal'],
-                backColor=colors.HexColor('#F0FFF4'),
-                borderColor=colors.HexColor('#48BB78'),
-                borderWidth=1, borderPadding=8,
-                leftIndent=10, rightIndent=10,
-                spaceAfter=12, leading=16)
-            # Afficher chaque ligne du protocole
             for line in dec.treatment_protocol.strip().split('\n'):
                 if line.strip():
                     elements.append(Paragraph(f"• {line.strip()}", styles['Normal']))
             elements.append(Spacer(1, 16))
 
-        # ── Signature Numérique ───────────────────────────────────
-        doctor = dec.validated_by
+        doctor      = dec.validated_by
         doctor_name = f"{doctor.prenom} {doctor.nom}".strip()
-        doctor_spec = doctor.specialite or ''
         validated_at = dec.validated_at.strftime('%d/%m/%Y à %H:%M') if dec.validated_at else ''
 
         sig_data = [
-            ["Validé par:", doctor_name],
-            ["Spécialité:", doctor_spec],
-            ["Établissement:", doctor.etablissement or '—'],
-            ["Date de validation:", validated_at],
-            ["Code de signature:", dec.signature_code or '—'],
+            ["Validé par :",       doctor_name],
+            ["Spécialité :",       doctor.specialite or '—'],
+            ["Établissement :",    doctor.etablissement or '—'],
+            ["Date de validation :", validated_at],
+            ["Code de signature :", dec.signature_code or '—'],
         ]
         sig_table = Table(sig_data, colWidths=[130, 370])
         sig_table.setStyle(TableStyle([
@@ -740,7 +823,7 @@ def _generate_rapport(rcp):
     qr_img.save(qr_buf, format='PNG')
     qr_buf.seek(0)
     elements.append(Paragraph("Vérification d'authenticité", styles['Heading3']))
-    elements.append(Paragraph(f"Scannez le QR code pour vérifier l'authenticité de ce document.", styles['Normal']))
+    elements.append(Paragraph("Scannez le QR code pour vérifier l'authenticité de ce document.", styles['Normal']))
     elements.append(RLImage(qr_buf, width=100, height=100))
 
     doc.build(elements)
