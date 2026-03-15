@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 
+
 // ─── API helper ───────────────────────────────────────────────────────────────
 const API = 'http://localhost:8000/api';
 
@@ -123,6 +124,7 @@ export default function Dashboard() {
     setActiveNav(id);
     if (id === 'rcp')    navigate('/rcp');
     if (id === 'import') navigate('/import');
+    
   };
 
   // ── Logout ────────────────────────────────────────────────────────────────
@@ -252,7 +254,7 @@ export default function Dashboard() {
                 { icon: '➕', label: 'Nouveau patient',  sub: 'Créer un dossier',       color: 'linear-gradient(135deg,#4A6CF7,#6B87FF)', action: () => navigate('/page1'), highlight: true },
                 { icon: '💬', label: 'Discussion RCP',   sub: 'Réunions médicales',     color: 'linear-gradient(135deg,#00C9A7,#00a98b)', action: () => navigate('/rcp') },
                 { icon: '📥', label: 'Import données',   sub: 'CSV / Excel',            color: 'linear-gradient(135deg,#FFA26B,#ff8c4a)', action: () => navigate('/import') },
-                { icon: '📊', label: 'Statistiques',     sub: 'Tableaux de bord',       color: 'linear-gradient(135deg,#9B59B6,#8e44ad)', action: () => {} },
+                { icon: '📊', label: 'Statistiques',     sub: 'Tableaux de bord',       color: 'linear-gradient(135deg,#9B59B6,#8e44ad)', action: () => navigate('/statistics') },
               ].map(({ icon, label, sub, color, action, highlight }) => (
                 <button key={label} style={{ ...s.actionCard, ...(highlight ? s.actionHighlight : {}) }} onClick={action}>
                   <div style={{ ...s.actionIcon, background: color }}>{icon}</div>
