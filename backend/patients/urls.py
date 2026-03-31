@@ -1,8 +1,11 @@
 # ══════════════════════════════════════════
 # patients/urls.py
 # ══════════════════════════════════════════
+
 from django.urls import path
 from .views import (
+    VoiceParseView,
+    IDCardScanView,   # ✅ مهم
     WilayaListView, CommuneListView, HospitalListView,
     CancerTypeListView,
     PatientListCreateView, PatientDetailView,
@@ -10,6 +13,8 @@ from .views import (
     CancerListCreateView, CancerDetailView,
     ConsultationListCreateView,
 )
+
+from .views import WhisperParseView
 
 urlpatterns = [
     # ── Référentiels ──────────────────────────────────────
@@ -31,4 +36,12 @@ urlpatterns = [
 
     # ── Nested : Consultations ────────────────────────────
     path('<int:patient_pk>/consultations/',  ConsultationListCreateView.as_view(), name='patient-consultations'),
+
+    # ── Voice Parse ───────────────────────────────────────
+    path('voice-parse/', VoiceParseView.as_view(), name='voice-parse'),
+
+    # ── ✅ ID Card Scanner (الإصلاح هنا)
+    path('scan-id/', IDCardScanView.as_view(), name='scan-id'),
+    path('whisper-parse/', WhisperParseView.as_view()),
+
 ]

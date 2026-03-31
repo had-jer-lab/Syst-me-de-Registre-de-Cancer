@@ -1,6 +1,10 @@
 # ══════════════════════════════════════════
 # patients/views.py
 # ══════════════════════════════════════════
+import json
+import groq
+from decouple import config
+
 from rest_framework import generics, permissions, filters, status
 from rest_framework.views import APIView
 from rest_framework.response import Response
@@ -27,13 +31,11 @@ from .serializers import (
 # ─── Permission helper ────────────────────────────────────────────────────────
 
 class IsOwnerOrAdmin(permissions.BasePermission):
-    """Le patient appartient au médecin connecté ou l'utilisateur est admin."""
     def has_object_permission(self, request, view, obj):
         if request.user.is_staff or request.user.role == 'admin':
             return True
         if isinstance(obj, Patient):
             return obj.created_by == request.user
-        # Pour les sous-objets (Cancer, Consultation…)
         if hasattr(obj, 'patient'):
             return obj.patient.created_by == request.user
         return False
@@ -42,8 +44,8 @@ class IsOwnerOrAdmin(permissions.BasePermission):
 # ─── Géographie ──────────────────────────────────────────────────────────────
 
 class WilayaListView(generics.ListAPIView):
-    queryset         = Wilaya.objects.all()
-    serializer_class = WilayaSerializer
+    queryset           = Wilaya.objects.all()
+    serializer_class   = WilayaSerializer
     permission_classes = [permissions.IsAuthenticated]
 
 
@@ -84,10 +86,6 @@ class CancerTypeListView(generics.ListAPIView):
 # ─── Patients ────────────────────────────────────────────────────────────────
 
 class PatientListCreateView(generics.ListCreateAPIView):
-    """
-    GET  → liste des patients DU MÉDECIN CONNECTÉ uniquement
-    POST → créer un nouveau patient (created_by = user connecté)
-    """
     permission_classes = [permissions.IsAuthenticated]
     filter_backends    = [filters.SearchFilter, filters.OrderingFilter]
     search_fields      = ['first_name', 'last_name', 'numero_dossier', 'national_id',
@@ -99,7 +97,6 @@ class PatientListCreateView(generics.ListCreateAPIView):
 
     def get_queryset(self):
         user = self.request.user
-        # Admin voit tout ; médecin/biologiste voit ses patients
         if user.is_staff or user.role == 'admin':
             qs = Patient.objects.select_related(
                 'commune__wilaya', 'hospital', 'created_by'
@@ -112,20 +109,15 @@ class PatientListCreateView(generics.ListCreateAPIView):
                 deleted_at__isnull=True,
             )
 
-        # Filtres optionnels par query params
         sexe     = self.request.query_params.get('sexe')
         wilaya   = self.request.query_params.get('wilaya_id')
         hospital = self.request.query_params.get('hospital_id')
         stade    = self.request.query_params.get('stade')
 
-        if sexe:
-            qs = qs.filter(sexe=sexe)
-        if wilaya:
-            qs = qs.filter(commune__wilaya_id=wilaya)
-        if hospital:
-            qs = qs.filter(hospital_id=hospital)
-        if stade:
-            qs = qs.filter(cancers__stade_clinique=stade)
+        if sexe:     qs = qs.filter(sexe=sexe)
+        if wilaya:   qs = qs.filter(commune__wilaya_id=wilaya)
+        if hospital: qs = qs.filter(hospital_id=hospital)
+        if stade:    qs = qs.filter(cancers__stade_clinique=stade)
 
         return qs.order_by('-created_at')
 
@@ -139,7 +131,6 @@ class PatientListCreateView(generics.ListCreateAPIView):
 
 
 class PatientDetailView(generics.RetrieveUpdateDestroyAPIView):
-    """Détail complet d'un patient — accessible uniquement par son médecin ou admin."""
     permission_classes = [permissions.IsAuthenticated, IsOwnerOrAdmin]
 
     def get_serializer_class(self):
@@ -147,48 +138,31 @@ class PatientDetailView(generics.RetrieveUpdateDestroyAPIView):
 
     def get_queryset(self):
         user = self.request.user
-        if user.is_staff or user.role == 'admin':
-            return Patient.objects.select_related(
-                'commune__wilaya', 'hospital', 'created_by'
-            ).prefetch_related(
-                'cancers__cancer_type',
-                'cancers__treatments',
-                'cancers__biological_exams',
-                'cancers__imaging_exams',
-                'cancers__histology',
-                'cancers__metastases',
-                'cancers__follow_ups',
-                'consultations__user',
-            ).all()
-        return Patient.objects.select_related(
+        qs = Patient.objects.select_related(
             'commune__wilaya', 'hospital', 'created_by'
         ).prefetch_related(
-            'cancers__cancer_type',
-            'cancers__treatments',
-            'cancers__biological_exams',
-            'cancers__imaging_exams',
-            'cancers__histology',
-            'cancers__metastases',
-            'cancers__follow_ups',
-            'consultations__user',
-        ).filter(created_by=user)
+            'cancers__cancer_type', 'cancers__treatments',
+            'cancers__biological_exams', 'cancers__imaging_exams',
+            'cancers__histology', 'cancers__metastases',
+            'cancers__follow_ups', 'consultations__user',
+        )
+        if user.is_staff or user.role == 'admin':
+            return qs.all()
+        return qs.filter(created_by=user)
 
     def perform_destroy(self, instance):
-        # Soft delete
         from django.utils import timezone
         instance.deleted_at = timezone.now()
         instance.save()
 
 
-# ─── Stats rapides pour le dashboard ─────────────────────────────────────────
+# ─── Stats dashboard ─────────────────────────────────────────────────────────
 
 class DashboardStatsView(APIView):
-    """Statistiques pour le dashboard du médecin connecté."""
     permission_classes = [permissions.IsAuthenticated]
 
     def get(self, request):
         user = request.user
-
         if user.is_staff or user.role == 'admin':
             patients_qs = Patient.objects.filter(deleted_at__isnull=True)
         else:
@@ -206,7 +180,6 @@ class DashboardStatsView(APIView):
             created_at__month=(date.today().replace(day=1) - timedelta(days=1)).month,
         ).count()
 
-        # Répartition par stade
         stades = (
             patients_qs
             .filter(cancers__stade_clinique__isnull=False)
@@ -215,12 +188,8 @@ class DashboardStatsView(APIView):
             .annotate(count=Count('id'))
             .order_by('cancers__stade_clinique')
         )
-
-        # Répartition par sexe
         sexe_m = patients_qs.filter(sexe='M').count()
         sexe_f = patients_qs.filter(sexe='F').count()
-
-        # Top organes
         top_organes = (
             patients_qs
             .filter(cancers__cancer_type__isnull=False)
@@ -230,13 +199,13 @@ class DashboardStatsView(APIView):
         )
 
         return Response({
-            'total_patients':  total,
-            'this_month':      this_month,
-            'last_month':      last_month,
-            'evolution_pct':   round(((this_month - last_month) / last_month * 100) if last_month else 0, 1),
-            'sexe':            {'M': sexe_m, 'F': sexe_f},
-            'stades':          list(stades),
-            'top_organes':     list(top_organes),
+            'total_patients': total,
+            'this_month':     this_month,
+            'last_month':     last_month,
+            'evolution_pct':  round(((this_month - last_month) / last_month * 100) if last_month else 0, 1),
+            'sexe':           {'M': sexe_m, 'F': sexe_f},
+            'stades':         list(stades),
+            'top_organes':    list(top_organes),
         })
 
 
@@ -246,9 +215,7 @@ class CancerListCreateView(generics.ListCreateAPIView):
     permission_classes = [permissions.IsAuthenticated]
 
     def get_serializer_class(self):
-        if self.request.method == 'GET':
-            return CancerSerializer
-        return CancerCreateSerializer
+        return CancerSerializer if self.request.method == 'GET' else CancerCreateSerializer
 
     def get_queryset(self):
         patient_id = self.kwargs.get('patient_pk')
@@ -259,8 +226,7 @@ class CancerListCreateView(generics.ListCreateAPIView):
         return qs
 
     def perform_create(self, serializer):
-        patient_id = self.kwargs.get('patient_pk')
-        serializer.save(patient_id=patient_id)
+        serializer.save(patient_id=self.kwargs.get('patient_pk'))
 
 
 class CancerDetailView(generics.RetrieveUpdateDestroyAPIView):
@@ -290,3 +256,211 @@ class ConsultationListCreateView(generics.ListCreateAPIView):
             patient_id=self.kwargs.get('patient_pk'),
             user=self.request.user,
         )
+
+
+# ─── Voice Parse — Groq ──────────────────────────────────────────────────────
+
+class VoiceParseView(APIView):
+    """
+    POST { "transcript": "المريض بن علي أحمد من وهران مزوج" }
+    → retourne les champs patient détectés via Groq
+    """
+    permission_classes = [permissions.IsAuthenticated]
+
+    SYSTEM = """Tu es un assistant médical. L'utilisateur dicte des informations sur un patient en français ou en arabe dialectal algérien (ou un mélange).
+Retourne UNIQUEMENT un objet JSON valide, sans texte autour, sans markdown.
+Champs possibles :
+{"nom":"...","prenom":"...","dob":"YYYY-MM-DD","sexe":"♂ Masculin" ou "♀ Féminin","famille":"Célibataire" ou "Marié(e)" ou "Divorcé(e)" ou "Veuf / Veuve","tel":"...","wilaya":"...","commune":"...","profession":"...","poids":"...","taillep":"...","tabac":"🚭 Non-fumeur" ou "🚬 Fumeur actif" ou "⏹ Ex-fumeur","allergies":"...","observations":"..."}
+N'inclus que les champs détectés. Si rien, retourne {}.
+Exemples :
+- "المريض بن علي أحمد من وهران مزوج" → {"nom":"Benali","prenom":"Ahmed","wilaya":"Oran","famille":"Marié(e)"}
+- "patient Rahmani Sofiane né le 12 mars 1978 fumeur" → {"nom":"Rahmani","prenom":"Sofiane","dob":"1978-03-12","tabac":"🚬 Fumeur actif"}
+- "وزنه 80 كيلو طوله 175 راجل" → {"poids":"80","taillep":"175","sexe":"♂ Masculin"}"""
+
+    def post(self, request):
+        transcript = request.data.get('transcript', '').strip()
+        if not transcript:
+            return Response({'error': 'transcript requis'}, status=400)
+
+        api_key = config('GROQ_API_KEY', default='')
+        if not api_key:
+            return Response({'error': 'GROQ_API_KEY non configurée dans .env'}, status=500)
+
+        try:
+            client = groq.Groq(api_key=api_key)
+            completion = client.chat.completions.create(
+                model='llama-3.1-8b-instant',
+                max_tokens=500,
+                temperature=0,
+                response_format={'type': 'json_object'},
+                messages=[
+                    {'role': 'system', 'content': self.SYSTEM},
+                    {'role': 'user',   'content': transcript},
+                ],
+            )
+            text   = completion.choices[0].message.content.strip()
+            fields = json.loads(text)
+            return Response(fields)
+        except groq.AuthenticationError:
+            return Response({'error': 'GROQ_API_KEY غير صالح'}, status=502)
+        except groq.APIError as e:
+            return Response({'error': f'Groq API error: {str(e)}'}, status=502)
+        except (json.JSONDecodeError, KeyError) as e:
+            return Response({'error': f'Réponse invalide: {e}'}, status=502)
+        except Exception as e:
+            return Response({'error': str(e)}, status=500)
+
+
+# ─── ID Card Scan — Groq Vision ───────────────────────────────────────────────
+
+class IDCardScanView(APIView):
+    """
+    POST { "image": "data:image/jpeg;base64,..." }
+    → retourne les champs patient extraits de la CIN algérienne via Groq Vision
+    """
+    permission_classes = [permissions.IsAuthenticated]
+
+    SYSTEM = """Tu es un expert en lecture de cartes d'identité algériennes (بطاقة التعريف الوطنية).
+Analyse l'image et extrait les informations du porteur.
+Retourne UNIQUEMENT un objet JSON valide, sans texte autour, sans markdown.
+Champs possibles :
+{
+  "nom": "NOM en majuscules",
+  "prenom": "Prénom",
+  "dob": "YYYY-MM-DD",
+  "sexe": "♂ Masculin" ou "♀ Féminin",
+  "wilaya": "Wilaya de naissance",
+  "commune": "Commune de naissance",
+  "national_id": "Numéro de la carte"
+}
+N'inclus que les champs lisibles. Si l'image est illisible, retourne {}.
+"""
+
+    def post(self, request):
+        image_data = request.data.get('image', '')
+        if not image_data:
+            return Response({'error': 'image requise'}, status=400)
+
+        api_key = config('GROQ_API_KEY', default='')
+        if not api_key:
+            return Response({'error': 'GROQ_API_KEY non configurée'}, status=500)
+
+        # Nettoyer le préfixe base64
+        if ',' in image_data:
+            header, image_data = image_data.split(',', 1)
+            media_type = header.split(':')[1].split(';')[0] if ':' in header else 'image/jpeg'
+        else:
+            media_type = 'image/jpeg'
+
+        try:
+            client = groq.Groq(api_key=api_key)
+            completion = client.chat.completions.create(
+                model='meta-llama/llama-4-scout-17b-16e-instruct',
+                max_tokens=500,
+                temperature=0,
+                response_format={'type': 'json_object'},
+                messages=[
+                    {
+                        'role': 'user',
+                        'content': [
+                            {
+                                'type': 'image_url',
+                                'image_url': {
+                                    'url': f'data:{media_type};base64,{image_data}'
+                                }
+                            },
+                            {
+                                'type': 'text',
+                                'text': self.SYSTEM,
+                            }
+                        ]
+                    }
+                ],
+            )
+            text   = completion.choices[0].message.content.strip()
+            fields = json.loads(text)
+            return Response(fields)
+        except groq.AuthenticationError:
+            return Response({'error': 'GROQ_API_KEY غير صالح'}, status=502)
+        except groq.APIError as e:
+            return Response({'error': f'Groq API error: {str(e)}'}, status=502)
+        except (json.JSONDecodeError, KeyError) as e:
+            return Response({'error': f'Réponse invalide: {e}'}, status=502)
+        except Exception as e:
+            return Response({'error': str(e)}, status=500)
+
+
+# ─── Whisper Parse — أضيفي هذا في نهاية patients/views.py ───────────────────
+
+class WhisperParseView(APIView):
+    """
+    POST multipart/form-data { audio: <file>, lang: 'ar'|'fr'|'auto' }
+    1. Groq Whisper → transcript
+    2. Groq LLM     → champs JSON
+    → retourne { transcript, fields }
+    """
+    permission_classes = [permissions.IsAuthenticated]
+
+    SYSTEM = """Tu es un assistant médical. L'utilisateur dicte des informations sur un patient en français ou en arabe dialectal algérien (ou un mélange).
+Retourne UNIQUEMENT un objet JSON valide, sans texte autour, sans markdown.
+Champs possibles :
+{"nom":"...","prenom":"...","dob":"YYYY-MM-DD","sexe":"♂ Masculin" ou "♀ Féminin","famille":"Célibataire" ou "Marié(e)" ou "Divorcé(e)" ou "Veuf / Veuve","tel":"...","wilaya":"...","commune":"...","profession":"...","poids":"...","taillep":"...","tabac":"🚭 Non-fumeur" ou "🚬 Fumeur actif" ou "⏹ Ex-fumeur","allergies":"...","observations":"..."}
+N'inclus que les champs détectés. Si rien, retourne {}.
+Exemples :
+- "المريض بن علي أحمد من وهران مزوج" → {"nom":"Benali","prenom":"Ahmed","wilaya":"Oran","famille":"Marié(e)"}
+- "patient Rahmani Sofiane né le 12 mars 1978 fumeur" → {"nom":"Rahmani","prenom":"Sofiane","dob":"1978-03-12","tabac":"🚬 Fumeur actif"}
+- "وزنه 80 كيلو طوله 175 راجل" → {"poids":"80","taillep":"175","sexe":"♂ Masculin"}"""
+
+    def post(self, request):
+        audio_file = request.FILES.get('audio')
+        lang       = request.data.get('lang', 'ar')
+
+        if not audio_file:
+            return Response({'error': 'audio requis'}, status=400)
+
+        api_key = config('GROQ_API_KEY', default='')
+        if not api_key:
+            return Response({'error': 'GROQ_API_KEY non configurée'}, status=500)
+
+        try:
+            client = groq.Groq(api_key=api_key)
+
+            # ── Étape 1 : Whisper → transcript ───────────────────────────────
+            # لغة الإدخال لـ Whisper
+            whisper_lang = None if lang == 'auto' else lang
+
+            transcription = client.audio.transcriptions.create(
+                model='whisper-large-v3',
+                file=(audio_file.name, audio_file.read(), audio_file.content_type),
+                language=whisper_lang,
+                response_format='text',
+            )
+            transcript = transcription.strip() if isinstance(transcription, str) else transcription.text.strip()
+
+            if not transcript:
+                return Response({'transcript': '', 'fields': {}})
+
+            # ── Étape 2 : LLM → champs JSON ──────────────────────────────────
+            completion = client.chat.completions.create(
+                model='llama-3.1-8b-instant',
+                max_tokens=500,
+                temperature=0,
+                response_format={'type': 'json_object'},
+                messages=[
+                    {'role': 'system', 'content': self.SYSTEM},
+                    {'role': 'user',   'content': transcript},
+                ],
+            )
+            text   = completion.choices[0].message.content.strip()
+            fields = json.loads(text)
+
+            return Response({'transcript': transcript, 'fields': fields})
+
+        except groq.AuthenticationError:
+            return Response({'error': 'GROQ_API_KEY غير صالح'}, status=502)
+        except groq.APIError as e:
+            return Response({'error': f'Groq error: {str(e)}'}, status=502)
+        except (json.JSONDecodeError, KeyError) as e:
+            return Response({'error': f'Réponse invalide: {e}'}, status=502)
+        except Exception as e:
+            return Response({'error': str(e)}, status=500)

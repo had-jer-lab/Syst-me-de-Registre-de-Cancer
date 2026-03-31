@@ -25,6 +25,7 @@ INSTALLED_APPS = [
     'patients',
     'django_filters',
     'rcp',
+    'django_apscheduler',
 ]
 
 MIDDLEWARE = [

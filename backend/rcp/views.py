@@ -123,7 +123,6 @@ def create_rcp(request):
     )
     rcp.refresh_from_db()
 
-    # Le créateur est automatiquement participant
     RcpParticipant.objects.create(
         rcp_meeting=rcp,
         user=request.user,
@@ -157,25 +156,16 @@ def create_rcp(request):
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def start_rcp(request, rcp_id):
-    """
-    🔒 Règle de verrouillage :
-    - Seul le créateur peut démarrer la réunion
-    - La réunion doit être à l'heure prévue (ou passée) — vérification côté backend
-    - Quand il démarre, tous les participants reçoivent une notification pour ouvrir la discussion
-    """
     from django.utils import timezone
 
     rcp = get_object_or_404(RcpMeeting, id=rcp_id)
 
-    # Seul le créateur
     if rcp.created_by != request.user:
         return Response({"error": "Seul le créateur peut démarrer la réunion"}, status=403)
 
-    # Doit être scheduled
     if rcp.status != 'scheduled':
         return Response({"error": f"La réunion est déjà {rcp.status}"}, status=400)
 
-    # 🔒 Vérification : on ne peut pas démarrer avant l'heure prévue
     now = timezone.now()
     if rcp.meeting_datetime and rcp.meeting_datetime > now:
         remaining = rcp.meeting_datetime - now
@@ -187,7 +177,6 @@ def start_rcp(request, rcp_id):
     rcp.status = 'ongoing'
     rcp.save()
 
-    # 🔔 Notifier tous les participants (sauf le créateur)
     for participant in rcp.participants.select_related('user'):
         if participant.user != request.user:
             Notification.objects.create(
@@ -227,6 +216,7 @@ def my_rcp_history(request):
             "status":            m.status,
             "decision":          decision_text,
             "participants_count": m.participants.count(),
+            "video_call_active": m.video_call_active,
         })
     return Response(data)
 
@@ -249,45 +239,87 @@ def rcp_details(request, rcp_id):
             "email": p.user.email,
         })
 
+    # ─────────────────────────────────────────
+    # امتدادات ونوع MIME للصور — لكشف رسائل الصور القديمة
+    # ─────────────────────────────────────────
+    import os as _os
+    IMAGE_EXTENSIONS = {'.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp', '.svg', '.tiff', '.tif', '.heic', '.avif'}
+
     messages = []
     for m in rcp.messages.select_related('user').order_by('created_at'):
+        msg_type = m.msg_type  # القيمة المخزنة في DB
+
         msg_data = {
             "id":       m.id,
             "user":     f"{m.user.prenom} {m.user.nom}".strip(),
             "user_id":  m.user.id,
             "message":  m.message,
-            "msg_type": m.msg_type,
+            "msg_type": msg_type,
             "time":     m.created_at.strftime("%H:%M"),
             "date":     m.created_at.strftime("%d/%m/%Y"),
         }
-        # Inclure l'URL audio si c'est un message vocal
-        if m.msg_type == 'voice' and m.audio_file:
-            msg_data["audio_url"] = request.build_absolute_uri(m.audio_file.url)
-            msg_data["duration"]  = _fmt_duration(m.duration or 0)
+
+        if m.audio_file:
+            file_url = request.build_absolute_uri(m.audio_file.url)
+            msg_data["audio_url"] = file_url
+
+            if msg_type == 'voice':
+                msg_data["duration"] = _fmt_duration(m.duration or 0)
+
+            elif msg_type in ('file', 'image'):
+                # ── كشف تلقائي: هل هذا الملف صورة؟ ──
+                ext = _os.path.splitext(m.audio_file.name)[1].lower()
+                if ext in IMAGE_EXTENSIONS or msg_type == 'image':
+                    # تصحيح msg_type إذا كان مخزناً كـ 'file' لكنه في الواقع صورة
+                    msg_data["msg_type"]   = 'image'
+                    msg_data["image_url"]  = file_url
+                # إذا لم يكن صورة يبقى كـ file مع audio_url فقط
+
         messages.append(msg_data)
 
-    # ── Vote details ─────────────────────────────────────────────
     is_creator = rcp.created_by == request.user
 
-    votes = []
-    if is_creator:
-        for v in rcp.votes.select_related('user'):
-            votes.append({
-                "user": f"{v.user.prenom} {v.user.nom}".strip(),
-                "vote": v.vote_value,
-            })
+    import json as _json
 
-    my_vote    = None
-    user_vote  = rcp.votes.filter(user=request.user).first()
-    if user_vote:
-        my_vote = user_vote.vote_value
+    raw_proposals = rcp.vote_proposal or '[]'
+    try:
+        proposals_list = _json.loads(raw_proposals)
+        if not isinstance(proposals_list, list):
+            proposals_list = [{"index":0,"text":raw_proposals,"user":"","msg_type":"text"}]
+    except Exception:
+        proposals_list = [{"index":0,"text":raw_proposals,"user":"","msg_type":"text"}] if raw_proposals else []
 
+    proposals_with_votes = []
+    total_participants   = rcp.participants.count()
+    my_votes_map         = {}
+
+    for uv in rcp.votes.filter(user=request.user):
+        my_votes_map[uv.proposal_index] = uv.vote_value
+
+    for prop in proposals_list:
+        idx        = prop.get('index', 0)
+        prop_votes = rcp.votes.filter(proposal_index=idx)
+        summary    = {
+            "approve": prop_votes.filter(vote_value='approve').count(),
+            "reject":  prop_votes.filter(vote_value='reject').count(),
+            "abstain": prop_votes.filter(vote_value='abstain').count(),
+            "total":   total_participants,
+            "voted":   prop_votes.count(),
+        }
+        detail = []
+        if is_creator:
+            for v in prop_votes.select_related('user'):
+                detail.append({"user": f"{v.user.prenom} {v.user.nom}".strip(), "vote": v.vote_value})
+        proposals_with_votes.append({**prop, "summary": summary, "detail": detail, "my_vote": my_votes_map.get(idx)})
+
+    votes        = []
+    my_vote      = my_votes_map.get(0)
     vote_summary = {
-        "approve": rcp.votes.filter(vote_value='approve').count(),
-        "reject":  rcp.votes.filter(vote_value='reject').count(),
-        "abstain": rcp.votes.filter(vote_value='abstain').count(),
-        "total":   rcp.participants.count(),
-        "voted":   rcp.votes.count(),
+        "approve": rcp.votes.filter(vote_value='approve', proposal_index=0).count(),
+        "reject":  rcp.votes.filter(vote_value='reject',  proposal_index=0).count(),
+        "abstain": rcp.votes.filter(vote_value='abstain', proposal_index=0).count(),
+        "total":   total_participants,
+        "voted":   rcp.votes.filter(proposal_index=0).count(),
     }
 
     decision           = None
@@ -321,38 +353,46 @@ def rcp_details(request, rcp_id):
         "vote_proposal":      rcp.vote_proposal or '',
         "vote_open":          rcp.vote_open,
         "my_vote":            my_vote,
+        "proposals":          proposals_with_votes,
         "decision":           decision,
         "treatment_protocol": treatment_protocol,
         "signature_code":     signature_code,
         "rapport_url":        rapport_url,
+        "video_call_active":  rcp.video_call_active,
+        "video_call_room":    rcp.video_call_room,
     })
 
 
 # ══════════════════════════════════════════════
-# 🟢 CHAT — Texte + Vocal
+# 🟢 CHAT — Texte + Vocal + Fichiers + 🖼️ Images
 # ══════════════════════════════════════════════
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def add_message(request, rcp_id):
-    """
-    Accepte deux types de messages :
-    • Texte  : Content-Type: application/json       → { "message": "..." }
-    • Vocal  : Content-Type: multipart/form-data    → audio (file) + duration (int)
-    DRF détecte automatiquement le parser selon le Content-Type.
-    """
+    import os as _os
+
     rcp = get_object_or_404(RcpMeeting, id=rcp_id)
 
     if rcp.status == 'scheduled':
         return Response({"error": "La réunion n'a pas encore démarré"}, status=403)
-
     if rcp.status == 'closed':
         return Response({"error": "La réunion est fermée"}, status=403)
 
-    # ── Détecter le type selon la présence d'un fichier audio ──────────────
-    audio_file = request.FILES.get('audio')
+    audio_file  = request.FILES.get('audio')
+    image_file  = request.FILES.get('image')   # 🖼️ champ dédié image
+    file_attach = request.FILES.get('file')
 
+    # ── امتدادات الصور المدعومة ──
+    IMAGE_EXTENSIONS = {'.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp', '.svg', '.tiff', '.tif', '.heic', '.avif'}
+    IMAGE_MIME_TYPES  = {'image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/bmp',
+                         'image/svg+xml', 'image/tiff', 'image/heic', 'image/avif'}
+
+    sender_name = f"{request.user.prenom} {request.user.nom}".strip()
+
+    # ─────────────────────────────────────────
+    # 🎤 MESSAGE VOCAL
+    # ─────────────────────────────────────────
     if audio_file:
-        # ─── 🎤 Message Vocal ────────────────────────────────────────────────
         duration = 0
         try:
             duration = int(request.data.get('duration', 0))
@@ -360,27 +400,16 @@ def add_message(request, rcp_id):
             duration = 0
 
         msg = RcpDiscussion.objects.create(
-            rcp_meeting=rcp,
-            user=request.user,
-            message='',
-            msg_type='voice',
-            duration=duration,
+            rcp_meeting=rcp, user=request.user,
+            message='', msg_type='voice', duration=duration,
         )
-        # Déduire l'extension depuis le nom ou le content-type du fichier
         content_type = audio_file.content_type or ''
-        if 'ogg' in content_type:
-            ext = 'ogg'
-        elif 'mp4' in content_type or 'aac' in content_type:
-            ext = 'm4a'
-        else:
-            ext = 'webm'
-
-        name = f"voice_{rcp.id}_{msg.id}.{ext}"
-        msg.audio_file.save(name, audio_file, save=True)
+        ext = 'ogg' if 'ogg' in content_type else ('m4a' if ('mp4' in content_type or 'aac' in content_type) else 'webm')
+        msg.audio_file.save(f"voice_{rcp.id}_{msg.id}.{ext}", audio_file, save=True)
 
         resp = {
             "id":        msg.id,
-            "user":      f"{request.user.prenom} {request.user.nom}".strip(),
+            "user":      sender_name,
             "user_id":   request.user.id,
             "message":   '',
             "msg_type":  'voice',
@@ -389,42 +418,108 @@ def add_message(request, rcp_id):
             "time":      msg.created_at.strftime("%H:%M"),
             "date":      msg.created_at.strftime("%d/%m/%Y"),
         }
-        notif_msg = f"🎤 Message vocal de {request.user.prenom} {request.user.nom}".strip()
+        notif_msg = f"🎤 Message vocal de {sender_name}"
 
+        for participant in rcp.participants.select_related('user'):
+            if participant.user != request.user:
+                Notification.objects.create(user=participant.user, rcp_meeting=rcp, message=notif_msg)
+        return Response(resp, status=201)
+
+    # ─────────────────────────────────────────
+    # 🖼️ IMAGE — champ 'image' dédié (frontend envoie FormData avec image=...)
+    # ─────────────────────────────────────────
+    elif image_file:
+        ext  = _os.path.splitext(image_file.name)[1].lower() or '.jpg'
+        msg  = RcpDiscussion.objects.create(
+            rcp_meeting=rcp, user=request.user,
+            message=image_file.name, msg_type='image',
+        )
+        msg.audio_file.save(f"img_{rcp.id}_{msg.id}{ext}", image_file, save=True)
+        file_url = request.build_absolute_uri(msg.audio_file.url)
+
+        resp = {
+            "id":        msg.id,
+            "user":      sender_name,
+            "user_id":   request.user.id,
+            "message":   image_file.name,
+            "msg_type":  'image',
+            "image_url": file_url,   # ← champ dédié utilisé par le frontend
+            "audio_url": file_url,   # ← compatibilité
+            "time":      msg.created_at.strftime("%H:%M"),
+            "date":      msg.created_at.strftime("%d/%m/%Y"),
+        }
+        notif_msg = f"🖼️ {sender_name} a partagé une image"
+        for participant in rcp.participants.select_related('user'):
+            if participant.user != request.user:
+                Notification.objects.create(user=participant.user, rcp_meeting=rcp, message=notif_msg)
+        return Response(resp, status=201)
+
+    # ─────────────────────────────────────────
+    # 📎 FICHIER — champ 'file' générique
+    #    Détection automatique : si c'est une image → msg_type='image'
+    # ─────────────────────────────────────────
+    elif file_attach:
+        ext      = _os.path.splitext(file_attach.name)[1].lower()
+        mime     = (file_attach.content_type or '').lower()
+        is_image = (ext in IMAGE_EXTENSIONS) or (mime in IMAGE_MIME_TYPES)
+        msg_type = 'image' if is_image else 'file'
+
+        msg = RcpDiscussion.objects.create(
+            rcp_meeting=rcp, user=request.user,
+            message=file_attach.name, msg_type=msg_type,
+        )
+        safe_ext = ext if ext else '.bin'
+        msg.audio_file.save(f"file_{rcp.id}_{msg.id}{safe_ext}", file_attach, save=True)
+        file_url = request.build_absolute_uri(msg.audio_file.url)
+
+        resp = {
+            "id":        msg.id,
+            "user":      sender_name,
+            "user_id":   request.user.id,
+            "message":   file_attach.name,
+            "msg_type":  msg_type,
+            "audio_url": file_url,
+            "time":      msg.created_at.strftime("%H:%M"),
+            "date":      msg.created_at.strftime("%d/%m/%Y"),
+        }
+        if is_image:
+            resp["image_url"] = file_url  # ← champ dédié pour les images
+
+        notif_msg = (f"🖼️ {sender_name} a partagé une image"
+                     if is_image else
+                     f"{sender_name} a partagé un fichier : {file_attach.name[:40]}")
+        for participant in rcp.participants.select_related('user'):
+            if participant.user != request.user:
+                Notification.objects.create(user=participant.user, rcp_meeting=rcp, message=notif_msg)
+        return Response(resp, status=201)
+
+    # ─────────────────────────────────────────
+    # 💬 MESSAGE TEXTE
+    # ─────────────────────────────────────────
     else:
-        # ─── 💬 Message Texte (JSON) ─────────────────────────────────────────
         text = request.data.get('message', '').strip()
         if not text:
             return Response({"error": "Message vide"}, status=400)
 
         msg = RcpDiscussion.objects.create(
-            rcp_meeting=rcp,
-            user=request.user,
-            message=text,
-            msg_type='text',
+            rcp_meeting=rcp, user=request.user,
+            message=text, msg_type='text',
         )
         resp = {
             "id":       msg.id,
-            "user":     f"{request.user.prenom} {request.user.nom}".strip(),
+            "user":     sender_name,
             "user_id":  request.user.id,
             "message":  msg.message,
             "msg_type": 'text',
             "time":     msg.created_at.strftime("%H:%M"),
             "date":     msg.created_at.strftime("%d/%m/%Y"),
         }
-        sender_name = f"{request.user.prenom} {request.user.nom}".strip()
-        notif_msg   = f"💬 {sender_name}: {text[:60]}"
+        notif_msg = f"💬 {sender_name}: {text[:60]}"
 
-    # 🔔 Notifier les autres participants
-    for participant in rcp.participants.select_related('user'):
-        if participant.user != request.user:
-            Notification.objects.create(
-                user=participant.user,
-                rcp_meeting=rcp,
-                message=notif_msg
-            )
-
-    return Response(resp, status=201)
+        for participant in rcp.participants.select_related('user'):
+            if participant.user != request.user:
+                Notification.objects.create(user=participant.user, rcp_meeting=rcp, message=notif_msg)
+        return Response(resp, status=201)
 
 
 # ══════════════════════════════════════════════
@@ -433,39 +528,85 @@ def add_message(request, rcp_id):
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def set_vote_proposal(request, rcp_id):
-    """
-    Le créateur soumet une proposition au vote.
-    Peut provenir d'un seul message ou d'une sélection multiple (multi-vote).
-    Le frontend envoie { "proposal": "texte\n— autre texte" }
-    """
+    import json as _json
     rcp = get_object_or_404(RcpMeeting, id=rcp_id)
 
     if rcp.created_by != request.user:
         return Response({"error": "Seul le créateur peut ouvrir un vote"}, status=403)
-
     if rcp.status != 'ongoing':
         return Response({"error": "La réunion doit être en cours"}, status=400)
 
-    proposal = request.data.get('proposal', '').strip()
-    if not proposal:
+    proposals = request.data.get('proposals')
+    proposal  = request.data.get('proposal', '').strip()
+
+    if proposals and isinstance(proposals, list):
+        for i, p in enumerate(proposals): p['index'] = i
+        vote_proposal_json = _json.dumps(proposals, ensure_ascii=False)
+        notif_preview = f"{len(proposals)} proposition(s) soumises au vote"
+    elif proposal:
+        vote_proposal_json = _json.dumps(
+            [{"index":0,"text":proposal,"user":"","msg_type":"text"}], ensure_ascii=False)
+        notif_preview = proposal[:80]
+    else:
         return Response({"error": "Proposition requise"}, status=400)
 
-    # Réinitialiser les anciens votes et ouvrir un nouveau vote
-    rcp.votes.all().delete()
-    rcp.vote_proposal = proposal
-    rcp.vote_open     = True
-    rcp.save()
+    if rcp.vote_open:
+        try:
+            existing = _json.loads(rcp.vote_proposal or '[]')
+            if not isinstance(existing, list): existing = []
+        except: existing = []
+        try:
+            new_props = _json.loads(vote_proposal_json)
+        except: new_props = []
+        for p in new_props:
+            p['index'] = len(existing)
+            existing.append(p)
+        rcp.vote_proposal = _json.dumps(existing, ensure_ascii=False)
+        rcp.save(update_fields=['vote_proposal'])
+        notif_preview = "Nouveau(x) avis ajouté(s) au vote en cours"
+    else:
+        rcp.votes.all().delete()
+        rcp.vote_proposal = vote_proposal_json
+        rcp.vote_open     = True
+        rcp.save()
 
-    # 🔔 Notifier tous les participants
     for participant in rcp.participants.select_related('user'):
         if participant.user != request.user:
             Notification.objects.create(
-                user=participant.user,
-                rcp_meeting=rcp,
-                message=f"🗳️ Vote ouvert : {proposal[:80]}"
-            )
+                user=participant.user, rcp_meeting=rcp,
+                message=f"Vote : {notif_preview}")
 
-    return Response({"ok": True, "proposal": proposal})
+    return Response({"ok": True})
+
+
+# ══════════════════════════════════════════════
+# 🟢 ADD PROPOSAL to open vote
+# ══════════════════════════════════════════════
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def add_vote_proposal(request, rcp_id):
+    import json as _json
+    rcp = get_object_or_404(RcpMeeting, id=rcp_id)
+    if rcp.created_by != request.user:
+        return Response({"error": "Non autorisé"}, status=403)
+    if not rcp.vote_open:
+        return Response({"error": "Aucun vote en cours"}, status=400)
+    new_proposal = request.data.get('proposal')
+    if not new_proposal or not isinstance(new_proposal, dict):
+        return Response({"error": "Proposition invalide"}, status=400)
+    try:
+        proposals = _json.loads(rcp.vote_proposal or '[]')
+        if not isinstance(proposals, list): proposals = []
+    except: proposals = []
+    new_proposal['index'] = len(proposals)
+    proposals.append(new_proposal)
+    rcp.vote_proposal = _json.dumps(proposals, ensure_ascii=False)
+    rcp.save(update_fields=['vote_proposal'])
+    for participant in rcp.participants.select_related('user'):
+        if participant.user != request.user:
+            Notification.objects.create(user=participant.user, rcp_meeting=rcp,
+                message="Nouveau avis ajouté au vote en cours")
+    return Response({"ok": True, "new_index": new_proposal['index']})
 
 
 # ══════════════════════════════════════════════
@@ -474,12 +615,22 @@ def set_vote_proposal(request, rcp_id):
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def close_vote(request, rcp_id):
+    import json as _json
     rcp = get_object_or_404(RcpMeeting, id=rcp_id)
     if rcp.created_by != request.user:
         return Response({"error": "Seul le créateur peut fermer le vote"}, status=403)
     rcp.vote_open = False
     rcp.save()
-    return Response({"ok": True})
+    winner = None; winner_score = -1
+    try:
+        proposals = _json.loads(rcp.vote_proposal or '[]')
+        for prop in proposals:
+            idx   = prop.get('index', 0)
+            score = rcp.votes.filter(proposal_index=idx, vote_value='approve').count()
+            if score > winner_score:
+                winner_score = score; winner = prop
+    except: pass
+    return Response({"ok": True, "winner": winner, "winner_score": winner_score})
 
 
 # ══════════════════════════════════════════════
@@ -493,29 +644,33 @@ def vote(request, rcp_id):
     if not rcp.vote_open:
         return Response({"error": "Aucun vote en cours"}, status=400)
 
-    vote_value = request.data.get('vote')
+    vote_value     = request.data.get('vote')
+    proposal_index = int(request.data.get('proposal_index', 0))
+
+    if vote_value == 'cancel':
+        RcpVote.objects.filter(rcp_meeting=rcp, user=request.user, proposal_index=proposal_index).delete()
+        pv = rcp.votes.filter(proposal_index=proposal_index)
+        summary = {"approve":pv.filter(vote_value='approve').count(),"reject":pv.filter(vote_value='reject').count(),
+                   "abstain":pv.filter(vote_value='abstain').count(),"total":rcp.participants.count(),"voted":pv.count()}
+        return Response({"ok":True,"vote_summary":summary,"my_vote":None,"proposal_index":proposal_index})
+
     if vote_value not in ['approve', 'reject', 'abstain']:
         return Response({"error": "Vote invalide"}, status=400)
 
-    # Empêcher de voter deux fois
-    if RcpVote.objects.filter(rcp_meeting=rcp, user=request.user).exists():
-        return Response({"error": "Vous avez déjà voté"}, status=400)
-
-    RcpVote.objects.create(
-        rcp_meeting=rcp,
-        user=request.user,
-        vote_value=vote_value
+    RcpVote.objects.update_or_create(
+        rcp_meeting=rcp, user=request.user, proposal_index=proposal_index,
+        defaults={"vote_value": vote_value},
     )
 
+    pv = rcp.votes.filter(proposal_index=proposal_index)
     summary = {
-        "approve": rcp.votes.filter(vote_value='approve').count(),
-        "reject":  rcp.votes.filter(vote_value='reject').count(),
-        "abstain": rcp.votes.filter(vote_value='abstain').count(),
+        "approve": pv.filter(vote_value='approve').count(),
+        "reject":  pv.filter(vote_value='reject').count(),
+        "abstain": pv.filter(vote_value='abstain').count(),
         "total":   rcp.participants.count(),
-        "voted":   rcp.votes.count(),
+        "voted":   pv.count(),
     }
-
-    return Response({"ok": True, "vote_summary": summary, "my_vote": vote_value})
+    return Response({"ok": True, "vote_summary": summary, "my_vote": vote_value, "proposal_index": proposal_index})
 
 
 # ══════════════════════════════════════════════
@@ -528,7 +683,6 @@ def validate_decision(request, rcp_id):
 
     if rcp.created_by != request.user:
         return Response({"error": "Seul le créateur de la RCP peut valider la décision finale."}, status=403)
-
     if rcp.status != 'ongoing':
         return Response({"error": "La réunion doit être en cours pour valider une décision."}, status=400)
 
@@ -560,7 +714,6 @@ def validate_decision(request, rcp_id):
     except Exception as e:
         return Response({"message": "Décision validée, erreur PDF", "error": str(e)}, status=207)
 
-    # 🔔 Notifier les participants de la décision finale
     for participant in rcp.participants.select_related('user'):
         if participant.user != request.user:
             Notification.objects.create(
@@ -605,16 +758,11 @@ def verify_rcp(request, rcp_id):
 
 
 # ══════════════════════════════════════════════
-# 🟢 CHECK PENDING — يُستدعى كل دقيقة من Frontend
+# 🟢 CHECK PENDING
 # ══════════════════════════════════════════════
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def check_pending_meetings(request):
-    """
-    يفحص الـ RCP المجدولة التي حان موعدها.
-    يرسل إشعار [RAPPEL] للمنشئ ليضغط ▶ Démarrer.
-    لا يفتح المناقشة تلقائياً — القرار للمنشئ فقط.
-    """
     from django.utils import timezone
     now = timezone.now()
 
@@ -630,23 +778,16 @@ def check_pending_meetings(request):
 
         for participant in rcp.participants.select_related('user'):
             user = participant.user
-
-            # Éviter les doublons de notification RAPPEL
             already = Notification.objects.filter(
                 user=user, rcp_meeting=rcp, message__startswith="[RAPPEL]"
             ).exists()
-
             if not already:
                 if user == rcp.created_by:
-                    msg = (
-                        f"[RAPPEL] ⏰ Votre RCP pour {patient_name} ({dt_str}) "
-                        f"a commencé. Veuillez démarrer la réunion."
-                    )
+                    msg = (f"[RAPPEL] ⏰ Votre RCP pour {patient_name} ({dt_str}) "
+                           f"a commencé. Veuillez démarrer la réunion.")
                 else:
-                    msg = (
-                        f"[RAPPEL] ⏰ La RCP pour {patient_name} ({dt_str}) "
-                        f"a commencé. En attente du démarrage par le responsable."
-                    )
+                    msg = (f"[RAPPEL] ⏰ La RCP pour {patient_name} ({dt_str}) "
+                           f"a commencé. En attente du démarrage par le responsable.")
                 Notification.objects.create(user=user, rcp_meeting=rcp, message=msg)
                 notified_count += 1
 
@@ -683,12 +824,57 @@ def mark_notification_read(request, notif_id):
 
 
 # ══════════════════════════════════════════════
+# 📹 START VIDEO CALL
+# ══════════════════════════════════════════════
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def start_video(request, rcp_id):
+    import re
+    rcp = get_object_or_404(RcpMeeting, id=rcp_id)
+
+    if rcp.created_by != request.user:
+        return Response({'error': 'Non autorisé'}, status=403)
+    if rcp.status != 'ongoing':
+        return Response({'error': 'La RCP doit être en cours'}, status=400)
+
+    slug = re.sub(r'[^a-zA-Z0-9]', '', rcp.cancer.patient.full_name.replace(' ', ''))[:20]
+    room = f"RCP-{slug}-{rcp.id}"
+
+    rcp.video_call_active = True
+    rcp.video_call_room   = room
+    rcp.save(update_fields=['video_call_active', 'video_call_room'])
+
+    for participant in rcp.participants.select_related('user'):
+        if participant.user != request.user:
+            Notification.objects.create(
+                user=participant.user,
+                rcp_meeting=rcp,
+                message=f"📹 Vidéo-conférence démarrée pour {rcp.cancer.patient.full_name} — cliquez pour rejoindre"
+            )
+
+    return Response({'room': room, 'video_call_active': True})
+
+
+# ══════════════════════════════════════════════
+# 📹 END VIDEO CALL
+# ══════════════════════════════════════════════
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def end_video(request, rcp_id):
+    rcp = get_object_or_404(RcpMeeting, id=rcp_id)
+    if rcp.created_by != request.user:
+        return Response({'error': 'Non autorisé'}, status=403)
+    rcp.video_call_active = False
+    rcp.save(update_fields=['video_call_active'])
+    return Response({'video_call_active': False})
+
+
+# ══════════════════════════════════════════════
 # 🔒 HELPERS
 # ══════════════════════════════════════════════
 def _fmt_duration(seconds):
-    """Convertit des secondes en mm:ss"""
     s = int(seconds)
-    return f"{s // 60}:{str(s % 60).padStart(2, '0')}" if False else f"{s // 60}:{s % 60:02d}"
+    return f"{s // 60}:{s % 60:02d}"
 
 
 def _generate_rapport(rcp):
@@ -704,7 +890,6 @@ def _generate_rapport(rcp):
     except ImportError:
         raise Exception("Installer: pip install reportlab qrcode[pil]")
 
-    # Enregistrer une police Unicode selon l'OS
     if platform.system() == 'Windows':
         font_paths      = [r'C:\Windows\Fonts\arial.ttf',    r'C:\Windows\Fonts\calibri.ttf']
         font_bold_paths = [r'C:\Windows\Fonts\arialbd.ttf',  r'C:\Windows\Fonts\calibrib.ttf']
@@ -768,16 +953,41 @@ def _generate_rapport(rcp):
         elements.append(Paragraph(f"• {full_name} — {p.role_in_rcp}", styles['Normal']))
     elements.append(Spacer(1, 12))
 
-    approve = rcp.votes.filter(vote_value='approve').count()
-    reject  = rcp.votes.filter(vote_value='reject').count()
-    abstain = rcp.votes.filter(vote_value='abstain').count()
+    import json as _json
     elements.append(Paragraph("Résultats du Vote", styles['Heading2']))
-    elements.append(Paragraph(f"Approuvé : {approve}   Rejeté : {reject}   Abstention : {abstain}", styles['Normal']))
+    try:
+        proposals = _json.loads(rcp.vote_proposal or '[]')
+        if not isinstance(proposals, list): proposals = []
+    except: proposals = []
+
+    if proposals:
+        for prop in proposals:
+            idx   = prop.get('index', 0)
+            ptext = prop.get('text','—') if prop.get('msg_type') != 'voice' else f"Message vocal de {prop.get('user','—')}"
+            ap = rcp.votes.filter(proposal_index=idx, vote_value='approve').count()
+            rj = rcp.votes.filter(proposal_index=idx, vote_value='reject').count()
+            ab = rcp.votes.filter(proposal_index=idx, vote_value='abstain').count()
+            total = rcp.participants.count()
+            pt = Table([[f"Proposition {idx+1}", ptext],
+                        [f"Dr. {prop.get('user','—')}", f"Approuvé : {ap}   Rejeté : {rj}   Abstention : {ab}   (sur {total})"]],
+                       colWidths=[130, 370])
+            pt.setStyle(TableStyle([
+                ('BACKGROUND',(0,0),(0,-1),colors.HexColor('#EEF2FF')),
+                ('FONTNAME',(0,0),(-1,-1),FONT_NAME),('FONTSIZE',(0,0),(-1,-1),10),
+                ('GRID',(0,0),(-1,-1),0.5,colors.HexColor('#DDE4F3')),('PADDING',(0,0),(-1,-1),6),
+                ('BACKGROUND',(0,1),(0,1),colors.HexColor('#F0FFF4')),
+            ]))
+            elements.append(pt)
+            elements.append(Spacer(1, 6))
+    else:
+        approve = rcp.votes.filter(vote_value='approve').count()
+        reject  = rcp.votes.filter(vote_value='reject').count()
+        abstain = rcp.votes.filter(vote_value='abstain').count()
+        elements.append(Paragraph(f"Approuvé : {approve}   Rejeté : {reject}   Abstention : {abstain}", styles['Normal']))
     elements.append(Spacer(1, 12))
 
     if hasattr(rcp, 'decision'):
         dec = rcp.decision
-
         elements.append(Paragraph("Décision Finale", styles['Heading2']))
         elements.append(Paragraph(dec.decision_text, styles['Normal']))
         elements.append(Spacer(1, 12))
