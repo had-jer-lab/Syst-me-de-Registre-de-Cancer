@@ -2,11 +2,12 @@ import React from 'react';
 import { useNavigate } from 'react-router-dom';
 
 const STEPS = [
-  { num: 1, label: 'Infos personnelles', path: '/page1' },
-  { num: 2, label: 'Diagnostic & Cancer', path: '/page2' },
-  { num: 3, label: 'Données biologiques & Imagerie', path: '/page3' },
-  { num: 4, label: 'Habitudes de vie & Antécédents', path: '/page4' },
-  { num: 5, label: 'Résumé & Validation', path: '/page5' },
+  { num: 1, label: 'Infos personnelles',     path: '/page1', icon: '👤' },
+  { num: 2, label: 'Diagnostic & Cancer',    path: '/page2', icon: '🎗' },
+  { num: 3, label: 'Traitements',            path: '/page6', icon: '💊' },
+  { num: 4, label: 'Biologie & Imagerie',    path: '/page3', icon: '🔬' },
+  { num: 5, label: 'Habitudes & Antécédents',path: '/page4', icon: '🌿' },
+  { num: 6, label: 'Résumé & Validation',    path: '/page5', icon: '📋' },
 ];
 
 export default function Layout({ children, currentStep, progress }) {
@@ -16,12 +17,12 @@ export default function Layout({ children, currentStep, progress }) {
     <div className="app-wrapper">
       {/* TOPBAR */}
       <div className="topbar">
-        <div className="brand" onClick={() => navigate('/page1')} style={{ cursor: 'pointer' }}>
+        <div className="brand" onClick={() => navigate('/dashboard')} style={{ cursor: 'pointer' }}>
           <div className="brand-icon">⚕</div>
           MedDossier
         </div>
         <div className="topbar-right">
-          <button className="notif-btn">🔔</button>
+          <button className="notif-btn" title="Retour au dashboard" onClick={() => navigate('/dashboard')}>🏠</button>
           <div className="avatar">DR</div>
         </div>
       </div>
@@ -32,11 +33,11 @@ export default function Layout({ children, currentStep, progress }) {
         {/* SIDEBAR */}
         <div className="sidebar">
           <div className="sidebar-logo">
-            Nouveau Patient <span>5 étapes</span>
+            Nouveau dossier <span>6 étapes</span>
           </div>
           <div className="sidebar-steps">
             {STEPS.map(step => {
-              const isDone = step.num < currentStep;
+              const isDone   = step.num < currentStep;
               const isActive = step.num === currentStep;
               return (
                 <button
@@ -45,7 +46,7 @@ export default function Layout({ children, currentStep, progress }) {
                   onClick={() => navigate(step.path)}
                 >
                   <div className="s-num">
-                    {isDone ? '✓' : step.num}
+                    {isDone ? '✓' : step.icon || step.num}
                   </div>
                   <div className="s-step-label">{step.label}</div>
                 </button>
@@ -57,12 +58,9 @@ export default function Layout({ children, currentStep, progress }) {
 
         {/* CONTENT */}
         <div className="content">
-          {/* Progress Bar */}
           <div className="prog-wrap">
             <div className="prog-fill" style={{ width: `${progress}%` }} />
           </div>
-
-          {/* Page content */}
           <div className="page-enter">
             {children}
           </div>

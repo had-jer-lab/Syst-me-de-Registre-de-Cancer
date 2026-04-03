@@ -87,37 +87,36 @@ export default function Page1() {
   const [errors, setErrors] = useState({});
 
   useEffect(() => {
-    if (data.dob) update({ age: calcAge(data.dob) });
-  }, [data.dob]);
+    if (data.date_naissance) update({ age: calcAge(data.date_naissance) });
+  }, [data.date_naissance]);
 
   // Communes disponibles selon la wilaya choisie
   const communesDispos = data.wilaya ? (WILAYAS_COMMUNES[data.wilaya] || []) : [];
 
   const set = (key) => (e) => {
     update({ [key]: e.target.value });
-    // Effacer l'erreur au changement
     if (errors[key]) setErrors(prev => ({ ...prev, [key]: '' }));
   };
 
   // Quand on change de wilaya, réinitialiser la commune
   const handleWilayaChange = (e) => {
-    update({ wilaya: e.target.value, commune: '' });
+    update({ wilaya: e.target.value, commune: '', commune_id: null });
     if (errors.wilaya) setErrors(prev => ({ ...prev, wilaya: '' }));
   };
 
   const handleNext = () => {
     const newErrors = {};
 
-    if (!data.nom.trim())    newErrors.nom    = 'Le nom est obligatoire';
-    if (!data.prenom.trim()) newErrors.prenom = 'Le prénom est obligatoire';
-    if (!data.dob)           newErrors.dob    = 'La date de naissance est obligatoire';
-    if (!data.sexe)          newErrors.sexe   = 'Veuillez sélectionner le sexe';
+    if (!data.last_name?.trim())    newErrors.last_name    = 'Le nom est obligatoire';
+    if (!data.first_name?.trim())   newErrors.first_name   = 'Le prénom est obligatoire';
+    if (!data.date_naissance)       newErrors.date_naissance = 'La date de naissance est obligatoire';
+    if (!data.sexe)                 newErrors.sexe         = 'Veuillez sélectionner le sexe';
 
-    if (data.tel && !validatePhone(data.tel)) {
-      newErrors.tel = 'Format invalide (ex: 0770 123 456)';
+    if (data.phone && !validatePhone(data.phone)) {
+      newErrors.phone = 'Format invalide (ex: 0770 123 456)';
     }
-    if (data.nin && !validateNIN(data.nin)) {
-      newErrors.nin = 'Le NIN doit contenir exactement 18 chiffres';
+    if (data.national_id && !validateNIN(data.national_id)) {
+      newErrors.national_id = 'Le NIN doit contenir exactement 18 chiffres';
     }
 
     if (Object.keys(newErrors).length > 0) {
@@ -146,24 +145,24 @@ export default function Page1() {
               <div className="fg">
                 <div className="fl">Nom *</div>
                 <input
-                  className={`fi ${errors.nom ? 'err' : ''}`}
+                  className={`fi ${errors.last_name ? 'err' : ''}`}
                   type="text"
                   placeholder="Nom de famille"
-                  value={data.nom}
-                  onChange={set('nom')}
+                  value={data.last_name || ''}
+                  onChange={set('last_name')}
                 />
-                {errors.nom && <span style={s.errTxt}>{errors.nom}</span>}
+                {errors.last_name && <span style={s.errTxt}>{errors.last_name}</span>}
               </div>
               <div className="fg">
                 <div className="fl">Prénom *</div>
                 <input
-                  className={`fi ${errors.prenom ? 'err' : ''}`}
+                  className={`fi ${errors.first_name ? 'err' : ''}`}
                   type="text"
                   placeholder="Prénom"
-                  value={data.prenom}
-                  onChange={set('prenom')}
+                  value={data.first_name || ''}
+                  onChange={set('first_name')}
                 />
-                {errors.prenom && <span style={s.errTxt}>{errors.prenom}</span>}
+                {errors.first_name && <span style={s.errTxt}>{errors.first_name}</span>}
               </div>
             </div>
           </SC>
@@ -172,13 +171,13 @@ export default function Page1() {
             <div className="fg">
               <div className="fl">Date de naissance *</div>
               <input
-                className={`fi ${errors.dob ? 'err' : ''}`}
+                className={`fi ${errors.date_naissance ? 'err' : ''}`}
                 type="date"
-                value={data.dob}
-                onChange={set('dob')}
+                value={data.date_naissance || ''}
+                onChange={set('date_naissance')}
                 max={new Date().toISOString().split('T')[0]}
               />
-              {errors.dob && <span style={s.errTxt}>{errors.dob}</span>}
+              {errors.date_naissance && <span style={s.errTxt}>{errors.date_naissance}</span>}
               {data.age && (
                 <span style={s.ageBadge}>{data.age}</span>
               )}
@@ -191,27 +190,26 @@ export default function Page1() {
               <div className="fi-wrap">
                 <span className="fi-icon">🪪</span>
                 <input
-                  className={`fi ${errors.nin ? 'err' : ''}`}
+                  className={`fi ${errors.national_id ? 'err' : ''}`}
                   style={{ paddingLeft: 38 }}
                   type="text"
                   placeholder="ex: 198012031001234567"
                   maxLength={18}
-                  value={data.nin}
+                  value={data.national_id || ''}
                   onChange={(e) => {
-                    const val = e.target.value.replace(/\D/g, ''); // chiffres uniquement
-                    update({ nin: val });
-                    if (errors.nin) setErrors(prev => ({ ...prev, nin: '' }));
+                    const val = e.target.value.replace(/\D/g, '');
+                    update({ national_id: val });
+                    if (errors.national_id) setErrors(prev => ({ ...prev, national_id: '' }));
                   }}
                 />
               </div>
-              {/* Compteur de caractères */}
               <div style={s.ninCounter}>
-                <span style={{ color: data.nin?.length === 18 ? '#00C9A7' : '#7A8BAD' }}>
-                  {data.nin?.length || 0} / 18 chiffres
+                <span style={{ color: data.national_id?.length === 18 ? '#00C9A7' : '#7A8BAD' }}>
+                  {data.national_id?.length || 0} / 18 chiffres
                 </span>
-                {data.nin?.length === 18 && <span style={s.ninValid}>✓ Valide</span>}
+                {data.national_id?.length === 18 && <span style={s.ninValid}>✓ Valide</span>}
               </div>
-              {errors.nin && <span style={s.errTxt}>{errors.nin}</span>}
+              {errors.national_id && <span style={s.errTxt}>{errors.national_id}</span>}
             </div>
           </SC>
 
@@ -222,24 +220,23 @@ export default function Page1() {
                 <div className="fi-wrap">
                   <span className="fi-icon">📱</span>
                   <input
-                    className={`fi ${errors.tel ? 'err' : ''}`}
+                    className={`fi ${errors.phone ? 'err' : ''}`}
                     style={{ paddingLeft: 38 }}
                     type="tel"
                     placeholder="0770 123 456"
                     maxLength={14}
-                    value={data.tel}
+                    value={data.phone || ''}
                     onChange={(e) => {
-                      // Formater automatiquement : 0XXX XXX XXX
                       let val = e.target.value.replace(/\D/g, '').slice(0, 10);
                       if (val.length > 4 && val.length <= 7) val = val.slice(0,4) + ' ' + val.slice(4);
                       else if (val.length > 7) val = val.slice(0,4) + ' ' + val.slice(4,7) + ' ' + val.slice(7);
-                      update({ tel: val });
-                      if (errors.tel) setErrors(prev => ({ ...prev, tel: '' }));
+                      update({ phone: val });
+                      if (errors.phone) setErrors(prev => ({ ...prev, phone: '' }));
                     }}
                   />
                 </div>
-                {errors.tel && <span style={s.errTxt}>{errors.tel}</span>}
-                {data.tel && !errors.tel && validatePhone(data.tel) && (
+                {errors.phone && <span style={s.errTxt}>{errors.phone}</span>}
+                {data.phone && !errors.phone && validatePhone(data.phone) && (
                   <span style={s.ninValid}>✓ Numéro valide</span>
                 )}
               </div>
@@ -252,7 +249,7 @@ export default function Page1() {
                     style={{ paddingLeft: 38 }}
                     type="email"
                     placeholder="exemple@mail.com"
-                    value={data.email}
+                    value={data.email || ''}
                     onChange={set('email')}
                   />
                 </div>
@@ -266,7 +263,8 @@ export default function Page1() {
 
           <SC label="Sexe biologique">
             <TagGroup
-              options={['♂ Masculin', '♀ Féminin']}
+              options={['M', 'F']}
+              labels={['♂ Masculin', '♀ Féminin']}
               value={data.sexe}
               onChange={v => { update({ sexe: v }); if (errors.sexe) setErrors(prev => ({ ...prev, sexe: '' })); }}
             />
@@ -275,9 +273,19 @@ export default function Page1() {
 
           <SC label="Situation familiale">
             <TagGroup
-              options={['Célibataire', 'Marié(e)', 'Divorcé(e)', 'Veuf / Veuve']}
-              value={data.famille}
-              onChange={v => update({ famille: v })}
+              options={['celibataire', 'marie', 'divorce', 'veuf']}
+              labels={['Célibataire', 'Marié(e)', 'Divorcé(e)', 'Veuf / Veuve']}
+              value={data.situation_familiale}
+              onChange={v => update({ situation_familiale: v })}
+            />
+          </SC>
+
+          <SC label="Couverture sociale">
+            <TagGroup
+              options={['cnas', 'casnos', 'pmsr', 'aucune', 'autre']}
+              labels={['CNAS', 'CASNOS', 'PMSR', 'Aucune', 'Autre']}
+              value={data.couverture_sociale}
+              onChange={v => update({ couverture_sociale: v })}
             />
           </SC>
 
@@ -297,19 +305,23 @@ export default function Page1() {
             {data.wilaya && (
               <div className="fg" style={{ marginTop: 12 }}>
                 <div className="fl">Commune</div>
-                <select className="fi" value={data.commune || ''} onChange={set('commune')}>
+                <select className="fi" value={data.commune || ''}
+                  onChange={e => update({ commune: e.target.value })}>
                   <option value="">Sélectionner une commune…</option>
                   {communesDispos.map(c => (
                     <option key={c} value={c}>{c}</option>
                   ))}
                 </select>
+                <div style={{ fontSize: 11, color: '#7A8BAD', marginTop: 4 }}>
+                  ℹ Le backend utilise un ID de commune — assurez-vous que l'API retourne <code>commune_id</code> lors de la recherche.
+                </div>
               </div>
             )}
 
             <div className="fg" style={{ marginTop: 12 }}>
               <div className="fl">Adresse complète (optionnel)</div>
               <input className="fi" type="text" placeholder="Rue, n°…"
-                value={data.adresse} onChange={set('adresse')} />
+                value={data.adresse || ''} onChange={set('adresse')} />
             </div>
           </SC>
 
@@ -317,7 +329,7 @@ export default function Page1() {
             <div className="fg">
               <div className="fl">Profession (optionnel)</div>
               <input className="fi" type="text" placeholder="ex: Enseignant, Agriculteur…"
-                value={data.profession} onChange={set('profession')} />
+                value={data.profession || ''} onChange={set('profession')} />
             </div>
           </SC>
 

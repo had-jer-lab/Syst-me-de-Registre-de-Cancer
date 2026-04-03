@@ -29,11 +29,11 @@ export default function Page4() {
   const set = (key) => (e) => update({ [key]: e.target.value });
 
   useEffect(() => {
-    const { val } = calcIMC(data.poids, data.taillep);
+    const { val } = calcIMC(data.poids, data.taille_patient);
     if (val) update({ imc: val });
-  }, [data.poids, data.taillep]);
+  }, [data.poids, data.taille_patient]);
 
-  const imc = calcIMC(data.poids, data.taillep);
+  const imc = calcIMC(data.poids, data.taille_patient);
 
   const addAntecedent = () => update({ antecedents: [...(data.antecedents || ['']), ''] });
   const removeAntecedent = (i) => update({ antecedents: (data.antecedents || []).filter((_, idx) => idx !== i) });
@@ -126,7 +126,7 @@ export default function Page4() {
                 <div className="fi-wrap">
                   <span className="fi-icon">📏</span>
                   <input className="fi" type="number" step="1" placeholder="ex: 175"
-                    value={data.taillep} onChange={set('taillep')} />
+                    value={data.taille_patient || ''} onChange={set('taille_patient')} />
                   <span className="fi-unit">cm</span>
                 </div>
               </Field>

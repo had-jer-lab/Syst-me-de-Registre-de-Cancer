@@ -1,6 +1,7 @@
-# ══════════════════════════════════════════
-# patients/models.py — Version complète selon BDD
-# ══════════════════════════════════════════
+"""
+patients/models.py — Version complète synchronisée avec l'interface
+Tous les champs collectés par les formulaires Page1→Page6 sont présents.
+"""
 from django.db import models
 from django.conf import settings
 
@@ -19,8 +20,8 @@ class Wilaya(models.Model):
 
 
 class Commune(models.Model):
-    name       = models.CharField(max_length=100)
-    wilaya     = models.ForeignKey(Wilaya, on_delete=models.CASCADE, related_name='communes')
+    name        = models.CharField(max_length=100)
+    wilaya      = models.ForeignKey(Wilaya, on_delete=models.CASCADE, related_name='communes')
     postal_code = models.CharField(max_length=10, blank=True)
 
     class Meta:
@@ -38,9 +39,9 @@ class Hospital(models.Model):
         ('clinic', 'Clinique privée'),
         ('other',  'Autre'),
     ]
-    name      = models.CharField(max_length=200)
-    wilaya    = models.ForeignKey(Wilaya, on_delete=models.SET_NULL, null=True, related_name='hospitals')
-    type      = models.CharField(max_length=20, choices=TYPE_CHOICES, default='chu')
+    name       = models.CharField(max_length=200)
+    wilaya     = models.ForeignKey(Wilaya, on_delete=models.SET_NULL, null=True, related_name='hospitals')
+    type       = models.CharField(max_length=20, choices=TYPE_CHOICES, default='chu')
     created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
@@ -50,29 +51,70 @@ class Hospital(models.Model):
 # ─── Patient ──────────────────────────────────────────────────────────────────
 
 class Patient(models.Model):
-    SEXE_CHOICES = [('M', 'Masculin'), ('F', 'Féminin')]
+    SEXE_CHOICES   = [('M', 'Masculin'), ('F', 'Féminin')]
     SOURCE_CHOICES = [
-        ('manual',  'Saisie manuelle'),
-        ('import',  'Import CSV/Excel'),
-        ('oedi',    'OEDI'),
+        ('manual', 'Saisie manuelle'),
+        ('import', 'Import CSV/Excel'),
+        ('oedi',   'OEDI'),
+    ]
+    FAMILLE_CHOICES = [
+        ('celibataire', 'Célibataire'),
+        ('marie',       'Marié(e)'),
+        ('divorce',     'Divorcé(e)'),
+        ('veuf',        'Veuf / Veuve'),
+    ]
+    COUVERTURE_CHOICES = [
+        ('cnas',    'CNAS'),
+        ('casnos',  'CASNOS'),
+        ('pmsr',    'PMSR'),
+        ('aucune',  'Aucune'),
+        ('autre',   'Autre'),
     ]
 
-    numero_dossier       = models.CharField(max_length=30, unique=True, blank=True)
-    national_id          = models.CharField(max_length=20, unique=True, null=True, blank=True)
-    first_name           = models.CharField(max_length=100)
-    last_name            = models.CharField(max_length=100)
-    date_naissance       = models.DateField()
-    sexe                 = models.CharField(max_length=1, choices=SEXE_CHOICES)
-    phone                = models.CharField(max_length=20, blank=True)
-    commune              = models.ForeignKey(Commune,  on_delete=models.SET_NULL, null=True, blank=True, related_name='patients')
-    hospital             = models.ForeignKey(Hospital, on_delete=models.SET_NULL, null=True, blank=True, related_name='patients')
-    created_by           = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, related_name='patients_crees')
-    is_merged            = models.BooleanField(default=False)
-    merged_into_patient  = models.ForeignKey('self', on_delete=models.SET_NULL, null=True, blank=True, related_name='merged_patients')
-    data_source          = models.CharField(max_length=20, choices=SOURCE_CHOICES, default='manual')
-    created_at           = models.DateTimeField(auto_now_add=True)
-    updated_at           = models.DateTimeField(auto_now=True)
-    deleted_at           = models.DateTimeField(null=True, blank=True)
+    # ── Identité ──────────────────────────────────────────────────────────────
+    numero_dossier      = models.CharField(max_length=30, unique=True, blank=True)
+    national_id         = models.CharField(max_length=20, unique=True, null=True, blank=True)
+    first_name          = models.CharField(max_length=100)
+    last_name           = models.CharField(max_length=100)
+    date_naissance      = models.DateField()
+    sexe                = models.CharField(max_length=1, choices=SEXE_CHOICES)
+    situation_familiale = models.CharField(max_length=20, choices=FAMILLE_CHOICES, blank=True)
+    profession          = models.CharField(max_length=100, blank=True)
+
+    # ── Contact ───────────────────────────────────────────────────────────────
+    phone               = models.CharField(max_length=20, blank=True)
+    email               = models.EmailField(blank=True)
+
+    # ── Adresse ───────────────────────────────────────────────────────────────
+    commune             = models.ForeignKey(Commune,  on_delete=models.SET_NULL, null=True, blank=True, related_name='patients')
+    adresse             = models.CharField(max_length=300, blank=True)
+
+    # ── Prise en charge ───────────────────────────────────────────────────────
+    hospital            = models.ForeignKey(Hospital, on_delete=models.SET_NULL, null=True, blank=True, related_name='patients')
+    couverture_sociale  = models.CharField(max_length=20, choices=COUVERTURE_CHOICES, blank=True)
+
+    # ── Anthropométrie (Page4) ────────────────────────────────────────────
+    poids                  = models.DecimalField(max_digits=5, decimal_places=2, null=True, blank=True)
+    taille                 = models.DecimalField(max_digits=5, decimal_places=2, null=True, blank=True)
+    imc                    = models.DecimalField(max_digits=4, decimal_places=1, null=True, blank=True)
+
+    # ── Antécédents & Allergies (Page4) ──────────────────────────────────
+    allergies              = models.TextField(blank=True)
+    autres_allergies       = models.TextField(blank=True)
+    antecedents_familiaux  = models.JSONField(default=list, blank=True)
+    antecedents_fam_yn     = models.CharField(max_length=20, blank=True)
+
+    # ── Observations libres (Page4) ───────────────────────────────────────
+    observations           = models.TextField(blank=True)
+
+    # ── Méta ──────────────────────────────────────────────────────────────────
+    created_by          = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, related_name='patients_crees')
+    is_merged           = models.BooleanField(default=False)
+    merged_into_patient = models.ForeignKey('self', on_delete=models.SET_NULL, null=True, blank=True, related_name='merged_patients')
+    data_source         = models.CharField(max_length=20, choices=SOURCE_CHOICES, default='manual')
+    created_at          = models.DateTimeField(auto_now_add=True)
+    updated_at          = models.DateTimeField(auto_now=True)
+    deleted_at          = models.DateTimeField(null=True, blank=True)
 
     class Meta:
         ordering = ['-created_at']
@@ -100,65 +142,202 @@ class Patient(models.Model):
         super().save(*args, **kwargs)
 
 
-# ─── Cancer ───────────────────────────────────────────────────────────────────
+# ─── Cancer Types ─────────────────────────────────────────────────────────────
 
 class CancerType(models.Model):
-    name      = models.CharField(max_length=100)
+    name       = models.CharField(max_length=100)
     cim10_code = models.CharField(max_length=10, unique=True, null=True, blank=True)
 
     def __str__(self):
         return f"{self.name} ({self.cim10_code or '—'})"
 
 
+# ─── Cancer ───────────────────────────────────────────────────────────────────
+
 class Cancer(models.Model):
     SOURCE_CHOICES = [('manual', 'Manuel'), ('import', 'Import'), ('oedi', 'OEDI')]
+    TYPE_TUMEUR_CHOICES = [
+        ('solide',         'Solide'),
+        ('liquide',        'Liquide'),
+        ('hematologique',  'Hématologique'),
+    ]
+    RECEPTEUR_CHOICES = [
+        ('positif', 'Positif'),
+        ('negatif', 'Négatif'),
+        ('inconnu', 'Inconnu'),
+    ]
+    HER2_CHOICES = [
+        ('positif',   'Positif'),
+        ('equivoque', 'Équivoque'),
+        ('negatif',   'Négatif'),
+        ('inconnu',   'Inconnu'),
+    ]
 
-    patient          = models.ForeignKey(Patient,    on_delete=models.CASCADE, related_name='cancers')
-    cancer_type      = models.ForeignKey(CancerType, on_delete=models.SET_NULL, null=True, blank=True)
-    stade_clinique   = models.CharField(max_length=10, blank=True)
+    # ── Référence patient ─────────────────────────────────────────────────────
+    patient    = models.ForeignKey(Patient,    on_delete=models.CASCADE, related_name='cancers')
+    cancer_type = models.ForeignKey(CancerType, on_delete=models.SET_NULL, null=True, blank=True)
+
+    # ── Localisation ──────────────────────────────────────────────────────────
+    type_tumeur        = models.CharField(max_length=30, choices=TYPE_TUMEUR_CHOICES, blank=True)
+    sous_type          = models.CharField(max_length=100, blank=True)
+    lateralite         = models.CharField(max_length=20, blank=True)   # Droit/Gauche/Bilatéral/N/A
+    cim10_code         = models.CharField(max_length=15, blank=True)
+
+    # ── Diagnostic ────────────────────────────────────────────────────────────
+    date_symptomes     = models.DateField(null=True, blank=True)
+    date_diagnostic    = models.DateField(null=True, blank=True)
+    base_diagnostic    = models.JSONField(default=list, blank=True)    # list of strings
+    etablissement_diag = models.CharField(max_length=200, blank=True)
+    service_diag       = models.CharField(max_length=100, blank=True)
+    medecin_diag       = models.CharField(max_length=150, blank=True)
+
+    # ── Histologie ────────────────────────────────────────────────────────────
+    type_histologique  = models.CharField(max_length=100, blank=True)
+    grade_histologique = models.CharField(max_length=50, blank=True)
+    bloc_anapath       = models.CharField(max_length=50, blank=True)
+
+    # ── Classification TNM & Stade ────────────────────────────────────────────
+    stade_clinique     = models.CharField(max_length=10, blank=True)
     stade_pathologique = models.CharField(max_length=10, blank=True)
-    tnm              = models.CharField(max_length=30, blank=True)   # ex: T2N1M0
-    grade            = models.CharField(max_length=20, blank=True)
-    date_diagnostic  = models.DateField(null=True, blank=True)
-    data_source      = models.CharField(max_length=20, choices=SOURCE_CHOICES, default='manual')
-    created_at       = models.DateTimeField(auto_now_add=True)
-    updated_at       = models.DateTimeField(auto_now=True)
+    tnm                = models.CharField(max_length=30, blank=True)   # ex: T2N1M0
+    grade              = models.CharField(max_length=20, blank=True)
+
+    # ── Données tumorales ─────────────────────────────────────────────────────
+    taille_tumorale    = models.DecimalField(max_digits=5, decimal_places=2, null=True, blank=True)
+    ganglions_envahis  = models.PositiveSmallIntegerField(null=True, blank=True)
+
+    # ── Statut ────────────────────────────────────────────────────────────────
+    localise           = models.BooleanField(default=True)
+    metastatique       = models.BooleanField(default=False)
+    recidive           = models.BooleanField(default=False)
+    sites_metastatiques = models.JSONField(default=list, blank=True)   # list of strings
+
+    # ── Récepteurs hormonaux ──────────────────────────────────────────────────
+    recepteur_er       = models.CharField(max_length=20, choices=RECEPTEUR_CHOICES, blank=True)
+    recepteur_pr       = models.CharField(max_length=20, choices=RECEPTEUR_CHOICES, blank=True)
+    her2               = models.CharField(max_length=20, choices=HER2_CHOICES, blank=True)
+
+    # ── Méta ──────────────────────────────────────────────────────────────────
+    data_source        = models.CharField(max_length=20, choices=SOURCE_CHOICES, default='manual')
+    created_at         = models.DateTimeField(auto_now_add=True)
+    updated_at         = models.DateTimeField(auto_now=True)
 
     def __str__(self):
         return f"Cancer {self.cancer_type} — {self.patient}"
 
+    @property
+    def triple_negatif(self):
+        return (
+            self.recepteur_er == 'negatif' and
+            self.recepteur_pr == 'negatif' and
+            self.her2 == 'negatif'
+        )
+
+
+# ─── Traitement ───────────────────────────────────────────────────────────────
 
 class Treatment(models.Model):
-    cancer         = models.ForeignKey(Cancer, on_delete=models.CASCADE, related_name='treatments')
-    type_traitement = models.CharField(max_length=100)   # chimio, radio, chirurgie…
-    protocole      = models.TextField(blank=True)
-    date_debut     = models.DateField(null=True, blank=True)
-    date_fin       = models.DateField(null=True, blank=True)
+    TYPE_CHOICES = [
+        ('chimio',    'Chimiothérapie'),
+        ('radio',     'Radiothérapie'),
+        ('chirurgie', 'Chirurgie'),
+        ('hormono',   'Hormonothérapie'),
+        ('immuno',    'Immunothérapie'),
+        ('targeted',  'Thérapie ciblée'),
+    ]
+    INTENTION_CHOICES = [
+        ('curatif',        'Curatif'),
+        ('adjuvant',       'Adjuvant'),
+        ('neo_adjuvant',   'Néo-adjuvant'),
+        ('palliatif',      'Palliatif'),
+        ('prophylactique', 'Prophylactique'),
+    ]
+    STATUT_CHOICES = [
+        ('planifie',  'Planifié'),
+        ('en_cours',  'En cours'),
+        ('termine',   'Terminé'),
+        ('pause',     'Pause'),
+        ('suspendu',  'Suspendu'),
+        ('abandonne', 'Abandonné'),
+    ]
+    REPONSE_CHOICES = [
+        ('RC', 'Rémission complète'),
+        ('RP', 'Rémission partielle'),
+        ('SD', 'Stabilisation'),
+        ('PD', 'Progression'),
+        ('NE', 'Non évaluable'),
+    ]
 
+    cancer               = models.ForeignKey(Cancer, on_delete=models.CASCADE, related_name='treatments')
+
+    # Identification
+    type_traitement      = models.CharField(max_length=20, choices=TYPE_CHOICES)
+    intention            = models.CharField(max_length=30, choices=INTENTION_CHOICES, blank=True)
+    statut               = models.CharField(max_length=20, choices=STATUT_CHOICES, default='planifie')
+    ligne                = models.CharField(max_length=30, blank=True)
+
+    # Protocole
+    protocole            = models.CharField(max_length=200, blank=True)
+    medicaments          = models.TextField(blank=True)
+    voie_administration  = models.CharField(max_length=50, blank=True)
+    jours_administration = models.JSONField(default=list, blank=True)
+
+    # Cycles
+    cycles_prevus        = models.PositiveSmallIntegerField(null=True, blank=True)
+    cycles_realises      = models.PositiveSmallIntegerField(null=True, blank=True)
+
+    # Dates
+    date_debut           = models.DateField(null=True, blank=True)
+    date_fin             = models.DateField(null=True, blank=True)
+
+    # Évaluation
+    reponse_tumorale     = models.CharField(max_length=10, choices=REPONSE_CHOICES, blank=True)
+    date_evaluation      = models.DateField(null=True, blank=True)
+
+    # Toxicité
+    grade_toxicite       = models.CharField(max_length=15, blank=True)
+    description_toxicite = models.TextField(blank=True)
+
+    created_at           = models.DateTimeField(auto_now_add=True)
+    updated_at           = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['date_debut']
+
+    def __str__(self):
+        return f"{self.get_type_traitement_display()} — {self.cancer.patient}"
+
+
+# ─── Examens biologiques ──────────────────────────────────────────────────────
 
 class BiologicalExam(models.Model):
-    cancer        = models.ForeignKey(Cancer, on_delete=models.CASCADE, related_name='biological_exams')
-    type_analyse  = models.CharField(max_length=100)
-    resultat      = models.TextField(blank=True)
-    date_analyse  = models.DateField(null=True, blank=True)
+    cancer       = models.ForeignKey(Cancer, on_delete=models.CASCADE, related_name='biological_exams')
+    type_analyse = models.CharField(max_length=100)
+    resultat     = models.TextField(blank=True)
+    unite        = models.CharField(max_length=20, blank=True)
+    valeur       = models.DecimalField(max_digits=10, decimal_places=3, null=True, blank=True)
+    date_analyse = models.DateField(null=True, blank=True)
+
+    def __str__(self):
+        return f"{self.type_analyse}: {self.valeur} {self.unite}"
 
 
 class ImagingExam(models.Model):
-    cancer       = models.ForeignKey(Cancer, on_delete=models.CASCADE, related_name='imaging_exams')
-    type_examen  = models.CharField(max_length=100)
-    conclusion   = models.TextField(blank=True)
-    date_examen  = models.DateField(null=True, blank=True)
+    cancer      = models.ForeignKey(Cancer, on_delete=models.CASCADE, related_name='imaging_exams')
+    type_examen = models.CharField(max_length=100)
+    conclusion  = models.TextField(blank=True)
+    date_examen = models.DateField(null=True, blank=True)
 
 
 class Histology(models.Model):
-    cancer                   = models.OneToOneField(Cancer, on_delete=models.CASCADE, related_name='histology')
-    type_histologique        = models.CharField(max_length=100, blank=True)
-    grade_histologique       = models.CharField(max_length=20, blank=True)
-    marge_chirurgicale       = models.CharField(max_length=50, blank=True)
-    envahissement_vasculaire = models.BooleanField(null=True, blank=True)
+    cancer                    = models.OneToOneField(Cancer, on_delete=models.CASCADE, related_name='histology')
+    type_histologique         = models.CharField(max_length=100, blank=True)
+    grade_histologique        = models.CharField(max_length=20, blank=True)
+    marge_chirurgicale        = models.CharField(max_length=50, blank=True)
+    envahissement_vasculaire  = models.BooleanField(null=True, blank=True)
     envahissement_lymphatique = models.BooleanField(null=True, blank=True)
-    date_resultat            = models.DateField(null=True, blank=True)
-    data_source              = models.CharField(max_length=20, default='manual')
+    date_resultat             = models.DateField(null=True, blank=True)
+    data_source               = models.CharField(max_length=20, default='manual')
 
 
 class Metastasis(models.Model):
@@ -240,11 +419,61 @@ class Consultation(models.Model):
 
 class DuplicateCase(models.Model):
     STATUS_CHOICES = [
-        ('pending',  'En attente'),
-        ('merged',   'Fusionné'),
-        ('ignored',  'Ignoré'),
+        ('pending', 'En attente'),
+        ('merged',  'Fusionné'),
+        ('ignored', 'Ignoré'),
     ]
     patient_1  = models.ForeignKey(Patient, on_delete=models.CASCADE, related_name='duplicates_as_1')
     patient_2  = models.ForeignKey(Patient, on_delete=models.CASCADE, related_name='duplicates_as_2')
     status     = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending')
     created_at = models.DateTimeField(auto_now_add=True)
+
+# ─── Pathologies chroniques associées (Page3) ─────────────────────────────────
+# Champ manquant dans la version originale — ajouté pour couvrir Page3
+
+class PathoChronique(models.Model):
+    patient     = models.ForeignKey(Patient, on_delete=models.CASCADE, related_name='pathos_chroniques')
+    name        = models.CharField(max_length=200)
+    date_debut  = models.CharField(max_length=50, blank=True)  # saisie libre depuis le formulaire
+
+    class Meta:
+        ordering = ['name']
+
+    def __str__(self):
+        return f"{self.name} — {self.patient}"
+
+
+# ─── Anthropométrie (Page4) — endpoint dédié pour /anthropometry/ ────────────
+# Les champs poids/taille/imc sont désormais sur le modèle Patient directement.
+# Ce serializer intermédiaire permet un PATCH partiel via l'endpoint /anthropometry/.
+# Aucun modèle supplémentaire nécessaire — les champs sont sur Patient.
+
+
+# ─── BiologicalExam — extension bilan sanguin ─────────────────────────────────
+# Le modèle BiologicalExam existant couvre déjà les marqueurs tumoraux et le bilan.
+# Rappel des champs utilisés par Page5 :
+#   type_analyse  → nom du marqueur ou de l'analyse ('CEA', 'NFS', 'Biopsie / Anatomopathologie'…)
+#   valeur        → valeur numérique (DecimalField)
+#   resultat      → valeur textuelle (pour NFS, statut biopsie…)
+#   unite         → unité ('ng/mL', 'U/mL', '%'…)
+#   date_analyse  → date de l'analyse
+
+
+# ─── NOTE MIGRATION ───────────────────────────────────────────────────────────
+# Après ce fichier, exécuter :
+#   python manage.py makemigrations patients
+#   python manage.py migrate
+#
+# Nouveaux champs ajoutés sur Patient :
+#   poids, taille, imc, allergies, autres_allergies,
+#   antecedents_familiaux (JSONField), antecedents_fam_yn, observations
+#
+# Nouveau modèle : PathoChronique
+#
+# Endpoints backend à créer (si pas encore existants) :
+#   POST /api/patients/{id}/anthropometry/        → PATCH Patient (poids, taille, imc…)
+#   POST /api/patients/{id}/habits/               → créer PatientHabit
+#   POST /api/patients/{id}/risk-factors/         → créer PatientRiskFactor
+#   POST /api/patients/{id}/cancers/{cid}/biological-exams/  → BiologicalExam
+#   POST /api/patients/{id}/cancers/{cid}/imaging-exams/     → ImagingExam
+#   POST /api/patients/{id}/cancers/{cid}/status-history/    → CancerStatusHistory
