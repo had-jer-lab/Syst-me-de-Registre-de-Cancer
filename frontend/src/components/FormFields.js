@@ -1,17 +1,20 @@
 import React from 'react';
 
-/* ── Tag selector ── */
-export function TagGroup({ options, value, onChange, className = '' }) {
+/* ── Tag selector ──
+   options : tableau de valeurs envoyées au contexte
+   labels  : tableau de libellés affichés (optionnel, = options si absent)
+*/
+export function TagGroup({ options, labels, value, onChange, className = '' }) {
   return (
     <div className={`tag-group ${className}`}>
-      {options.map(opt => (
+      {options.map((opt, i) => (
         <button
           key={opt}
           className={`tag ${value === opt ? 'sel' : ''}`}
           onClick={() => onChange(value === opt ? '' : opt)}
           type="button"
         >
-          {opt}
+          {labels ? labels[i] : opt}
         </button>
       ))}
     </div>
@@ -51,7 +54,7 @@ export function Toggle({ label, checked, onChange }) {
   );
 }
 
-/* ── Text input ── */
+/* ── Field ── */
 export function Field({ label, children, className = '' }) {
   return (
     <div className={`fg ${className}`}>

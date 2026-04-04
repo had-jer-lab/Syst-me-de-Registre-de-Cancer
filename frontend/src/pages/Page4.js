@@ -22,12 +22,6 @@ function imcMarkerPct(imc) {
   return Math.min(100, Math.max(0, ((parseFloat(imc) - 16) / (40 - 16)) * 100));
 }
 
-const ALC_OPTIONS = [
-  { val: 'Jamais', emoji: '🚱' },
-  { val: 'Rare', emoji: '🥂' },
-  { val: 'Modéré', emoji: '🍷' },
-  { val: 'Régulier', emoji: '🍺' },
-];
 
 export default function Page4() {
   const navigate = useNavigate();
@@ -35,11 +29,11 @@ export default function Page4() {
   const set = (key) => (e) => update({ [key]: e.target.value });
 
   useEffect(() => {
-    const { val } = calcIMC(data.poids, data.taillep);
+    const { val } = calcIMC(data.poids, data.taille_patient);
     if (val) update({ imc: val });
-  }, [data.poids, data.taillep]);
+  }, [data.poids, data.taille_patient]);
 
-  const imc = calcIMC(data.poids, data.taillep);
+  const imc = calcIMC(data.poids, data.taille_patient);
 
   const addAntecedent = () => update({ antecedents: [...(data.antecedents || ['']), ''] });
   const removeAntecedent = (i) => update({ antecedents: (data.antecedents || []).filter((_, idx) => idx !== i) });
@@ -65,55 +59,28 @@ export default function Page4() {
           {/* Tabagisme */}
           <SC label="Tabagisme">
             <TagGroup
-              options={['🚭 Non-fumeur', '🚬 Fumeur actif', '⏹ Ex-fumeur']}
+              options={['Non-fumeur', 'Fumeur actif', 'Ex-fumeur']}
               value={data.tabac}
               onChange={v => update({ tabac: v })}
             />
-            <div className="field-row c2" style={{ marginTop: 12 }}>
-              <Field label="Paquets-années">
-                <div className="fi-wrap">
-                  <input className="fi" type="number" step="0.5" placeholder="ex: 20"
-                    value={data.paquetsAnnees} onChange={set('paquetsAnnees')} />
-                  <span className="fi-unit">PA</span>
-                </div>
-              </Field>
-              <Field label="Durée (années)">
-                <div className="fi-wrap">
-                  <input className="fi" type="number" step="1" placeholder="ex: 15"
-                    value={data.dureTabac} onChange={set('dureTabac')} />
-                  <span className="fi-unit">ans</span>
-                </div>
-              </Field>
-            </div>
-            <Field label="Type de tabagisme" style={{ marginTop: 10 }}>
-              <TagGroup
-                options={['Cigarette', 'Chicha', 'Cigare', 'Tabac à chiquer']}
-                value={data.typeTabac}
-                onChange={v => update({ typeTabac: v })}
-              />
-            </Field>
+            
           </SC>
 
           {/* Alcool */}
           <SC label="Consommation d'alcool">
             <div className="alc-grid">
-              {ALC_OPTIONS.map(({ val, emoji }) => (
-                <div
-                  key={val}
-                  className={`alc-chip ${data.alcool === val ? 'sel' : ''}`}
-                  onClick={() => update({ alcool: data.alcool === val ? '' : val })}
-                >
-                  <div className="alc-emoji">{emoji}</div>
-                  <div className="alc-label">{val}</div>
-                </div>
-              ))}
+              <TagGroup
+                options={['Jamais', 'Rare', 'Modéré', 'Régulier']}
+                value={data.alcool}
+                onChange={v => update({ alcool: v })}
+              />
             </div>
           </SC>
 
           {/* Activité physique */}
           <SC label="Activité physique">
             <TagGroup
-              options={['🛋 Sédentaire', '🚶 Légère', '🚴 Modérée', '🏃 Intense']}
+              options={['Sédentaire', 'Légère', 'Modérée', 'Intense']}
               value={data.sport}
               onChange={v => update({ sport: v })}
             />
@@ -151,7 +118,7 @@ export default function Page4() {
                 <div className="fi-wrap">
                   <span className="fi-icon">⚖</span>
                   <input className="fi" type="number" step="0.5" placeholder="ex: 72"
-                    value={data.poids} onChange={set('poids')} />
+                    value={data.poids || ''} onChange={set('poids')} />
                   <span className="fi-unit">kg</span>
                 </div>
               </Field>
@@ -159,7 +126,7 @@ export default function Page4() {
                 <div className="fi-wrap">
                   <span className="fi-icon">📏</span>
                   <input className="fi" type="number" step="1" placeholder="ex: 175"
-                    value={data.taillep} onChange={set('taillep')} />
+                    value={data.taille_patient || ''} onChange={set('taille_patient')} />
                   <span className="fi-unit">cm</span>
                 </div>
               </Field>
@@ -187,7 +154,7 @@ export default function Page4() {
             <div style={{ marginTop: 12 }}>
               {(data.antecedents || ['']).map((ant, i) => (
                 <div key={i} className="list-item" style={{ marginBottom: 8 }}>
-                  <span style={{ fontSize: 18 }}>👨‍👩‍👧</span>
+                  <span style={{ fontSize: 18 }}></span>
                   <input
                     className="fi"
                     style={{ flex: 1, border: 'none', background: 'transparent' }}
@@ -206,13 +173,7 @@ export default function Page4() {
           </SC>
 
           {/* Traitements antérieurs */}
-          <SC label="Traitements oncologiques antérieurs">
-            <TagGroup
-              options={['Chimiothérapie','Radiothérapie','Chirurgie','Immunothérapie','Hormonothérapie','Greffe de moelle','Aucun']}
-              value={data.trtAnt}
-              onChange={v => update({ trtAnt: v })}
-            />
-          </SC>
+          
 
           {/* Allergies */}
           <SC label="Allergies médicamenteuses">

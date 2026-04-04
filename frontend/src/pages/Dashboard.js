@@ -303,7 +303,13 @@ export default function Dashboard() {
                   const sc     = STADE_COLORS[stade] || {};
                   return (
                     <tr key={p.id} style={{ ...s.tr, background: i % 2 === 0 ? '#fff' : '#FAFBFF' }}>
-                      <td style={s.td}><span style={s.dossierId}>{p.numero_dossier}</span></td>
+                      <td style={s.td}>
+                        <span 
+                          style={{ ...s.dossierId, cursor: 'pointer', textDecoration: 'underline' }}
+                          onClick={() => navigate(`/patient/${p.id}`)}>
+                          {p.numero_dossier}
+                        </span>
+                      </td>
                       <td style={s.td}>
                         <div style={s.patientCell}>
                           <div style={s.patientAvatar}>
