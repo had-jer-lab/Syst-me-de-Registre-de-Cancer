@@ -313,3 +313,71 @@ class ConsultationListCreateView(generics.ListCreateAPIView):
             patient_id=self.kwargs.get('patient_pk'),
             user=self.request.user,
         )
+
+
+
+# ─── À ajouter dans patients/views.py ────────────────────────────────────────
+
+from .models      import DemandeExamen          # ajouter à l'import
+from .serializers import DemandeExamenSerializer # ajouter à l'import
+
+
+class DemandeExamenListCreateView(generics.ListCreateAPIView):
+    """
+    GET  /api/patients/<patient_pk>/demandes/
+    POST /api/patients/<patient_pk>/demandes/
+    """
+    serializer_class   = DemandeExamenSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get_queryset(self):
+        patient_id = self.kwargs['patient_pk']
+        user = self.request.user
+        qs = DemandeExamen.objects.filter(patient_id=patient_id).select_related(
+            'medecin', 'patient', 'cancer__cancer_type'
+        )
+        if not (user.is_staff or getattr(user, 'role', '') == 'admin'):
+            qs = qs.filter(patient__created_by=user)
+        return qs
+
+    def perform_create(self, serializer):
+        serializer.save(
+            patient_id=self.kwargs['patient_pk'],
+            medecin=self.request.user,
+        )
+
+
+class DemandeExamenDetailView(generics.RetrieveUpdateDestroyAPIView):
+    """
+    GET / PATCH / DELETE  /api/patients/<patient_pk>/demandes/<pk>/
+    Permet aussi au biologiste/radiologue de renseigner le résultat (PATCH statut + resultat_texte)
+    """
+    serializer_class   = DemandeExamenSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get_queryset(self):
+        return DemandeExamen.objects.filter(patient_id=self.kwargs['patient_pk'])
+
+
+class AllDemandesView(generics.ListAPIView):
+    """
+    GET /api/patients/demandes/   → toutes les demandes du médecin connecté
+    Utile pour un tableau de bord dédié aux biologistes / radiologues
+    """
+    serializer_class   = DemandeExamenSerializer
+    permission_classes = [permissions.IsAuthenticated]
+    filter_backends    = [filters.OrderingFilter]
+    ordering_fields    = ['date_demande', 'statut', 'urgence']
+
+    def get_queryset(self):
+        user = self.request.user
+        qs = DemandeExamen.objects.select_related(
+            'medecin', 'patient', 'cancer__cancer_type'
+        )
+        if user.is_staff or getattr(user, 'role', '') == 'admin':
+            return qs
+        # Médecin : ses propres demandes
+        # Biologiste : demandes de type biologie
+        if getattr(user, 'role', '') == 'biologiste':
+            return qs.filter(type_demande='biologie')
+        return qs.filter(medecin=user)

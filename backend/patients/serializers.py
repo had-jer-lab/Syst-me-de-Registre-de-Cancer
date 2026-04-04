@@ -327,3 +327,48 @@ class DeathSerializer(serializers.ModelSerializer):
     class Meta:
         model  = Death
         fields = ['id', 'patient', 'date_death', 'cause_principale']
+
+
+
+
+
+# ─── À ajouter dans patients/serializers.py ──────────────────────────────────
+
+from .models import DemandeExamen   # ajouter à l'import existant
+
+
+class DemandeExamenSerializer(serializers.ModelSerializer):
+    medecin_nom    = serializers.SerializerMethodField()
+    patient_nom    = serializers.SerializerMethodField()
+    cancer_type    = serializers.CharField(source='cancer.cancer_type.name', read_only=True, default='—')
+    statut_label   = serializers.CharField(source='get_statut_display',  read_only=True)
+    urgence_label  = serializers.CharField(source='get_urgence_display', read_only=True)
+    type_label     = serializers.CharField(source='get_type_demande_display', read_only=True)
+
+    class Meta:
+        model  = DemandeExamen
+        fields = [
+            'id', 'patient', 'patient_nom',
+            'cancer', 'cancer_type',
+            'medecin', 'medecin_nom',
+            'type_demande', 'type_label',
+            'statut', 'statut_label',
+            'urgence', 'urgence_label',
+            'examens_demandes',
+            'motif_clinique', 'observations',
+            'date_demande', 'date_souhaitee',
+            'resultat_texte', 'date_resultat',
+        ]
+        read_only_fields = ['date_demande', 'medecin']
+
+    def get_medecin_nom(self, obj):
+        if obj.medecin:
+            return f"Dr. {obj.medecin.prenom} {obj.medecin.nom}"
+        return '—'
+
+    def get_patient_nom(self, obj):
+        return f"{obj.patient.first_name} {obj.patient.last_name}"
+
+    def create(self, validated_data):
+        validated_data['medecin'] = self.context['request'].user
+        return super().create(validated_data)

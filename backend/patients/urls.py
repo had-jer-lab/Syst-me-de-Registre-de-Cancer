@@ -42,3 +42,26 @@ urlpatterns = [
     path('<int:patient_pk>/consultations/',
          ConsultationListCreateView.as_view(), name='patient-consultations'),
 ]
+
+
+
+# ─── À ajouter dans patients/urls.py ─────────────────────────────────────────
+
+from .views import (
+    DemandeExamenListCreateView,   # ajouter à l'import
+    DemandeExamenDetailView,       # ajouter à l'import
+    AllDemandesView,               # ajouter à l'import
+)
+
+# Ajouter dans urlpatterns :
+urlpatterns += [
+    # Demandes par patient
+    path('<int:patient_pk>/demandes/',
+         DemandeExamenListCreateView.as_view(), name='patient-demandes'),
+    path('<int:patient_pk>/demandes/<int:pk>/',
+         DemandeExamenDetailView.as_view(),     name='patient-demande-detail'),
+
+    # Vue globale (biologiste / admin)
+    path('demandes/',
+         AllDemandesView.as_view(),             name='all-demandes'),
+]

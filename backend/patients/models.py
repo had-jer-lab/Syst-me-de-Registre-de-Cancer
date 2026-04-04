@@ -477,3 +477,53 @@ class PathoChronique(models.Model):
 #   POST /api/patients/{id}/cancers/{cid}/biological-exams/  → BiologicalExam
 #   POST /api/patients/{id}/cancers/{cid}/imaging-exams/     → ImagingExam
 #   POST /api/patients/{id}/cancers/{cid}/status-history/    → CancerStatusHistory
+
+
+
+
+# ─── À ajouter à la fin de patients/models.py ────────────────────────────────
+
+class DemandeExamen(models.Model):
+
+    TYPE_CHOICES = [
+        ('biologie',  'Bilan biologique'),
+        ('imagerie',  'Imagerie radiologique'),
+    ]
+    STATUT_CHOICES = [
+        ('en_attente',           'En attente'),
+        ('en_cours',             'En cours'),
+        ('resultat_disponible',  'Résultat disponible'),
+        ('annule',               'Annulé'),
+    ]
+    URGENCE_CHOICES = [
+        ('normal',      'Normal'),
+        ('urgent',      'Urgent'),
+        ('tres_urgent', 'Très urgent'),
+    ]
+
+    patient          = models.ForeignKey(Patient,    on_delete=models.CASCADE,   related_name='demandes_examens')
+    cancer           = models.ForeignKey('Cancer',   on_delete=models.SET_NULL,  null=True, blank=True, related_name='demandes_examens')
+    medecin          = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, related_name='demandes_envoyees')
+
+    type_demande     = models.CharField(max_length=20, choices=TYPE_CHOICES)
+    statut           = models.CharField(max_length=25, choices=STATUT_CHOICES, default='en_attente')
+    urgence          = models.CharField(max_length=15, choices=URGENCE_CHOICES, default='normal')
+
+    # Liste des examens demandés, ex: ["NFS", "CRP", "Glycémie"]
+    examens_demandes = models.JSONField(default=list)
+
+    motif_clinique   = models.TextField(blank=True)
+    observations     = models.TextField(blank=True)
+
+    date_demande     = models.DateTimeField(auto_now_add=True)
+    date_souhaitee   = models.DateField(null=True, blank=True)
+
+    # Résultat renseigné par le biologiste/radiologue
+    resultat_texte   = models.TextField(blank=True)
+    date_resultat    = models.DateField(null=True, blank=True)
+
+    class Meta:
+        ordering = ['-date_demande']
+
+    def __str__(self):
+        return f"{self.get_type_demande_display()} — {self.patient} ({self.statut})"

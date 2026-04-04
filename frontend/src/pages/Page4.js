@@ -118,7 +118,7 @@ export default function Page4() {
                 <div className="fi-wrap">
                   <span className="fi-icon">⚖</span>
                   <input className="fi" type="number" step="0.5" placeholder="ex: 72"
-                    value={data.poids} onChange={set('poids')} />
+                    value={data.poids || ''} onChange={set('poids')} />
                   <span className="fi-unit">kg</span>
                 </div>
               </Field>

@@ -188,7 +188,7 @@ function Toggle({ label, checked, onChange }) {
   );
 }
 
-function RecepteurRow({ label, value, onChange, options, labels, colors }) {
+function RecepteurRow({ label, value, onChange, options, colors }) {
   return (
     <div style={s.recRow}>
       <span style={s.recLabel}>{label}</span>
@@ -203,7 +203,7 @@ function RecepteurRow({ label, value, onChange, options, labels, colors }) {
               }}
               onClick={() => onChange(active ? '' : opt)}
             >
-              {labels ? labels[i] : opt}
+              {opt}
             </button>
           );
         })}
@@ -257,9 +257,7 @@ export default function Page2() {
 
             <Row cols={2} mt={12}>
               <F label="Type de tumeur">
-                <Tags options={['solide','liquide','hematologique']}
-                      labels={['Solide','Liquide','Hémato.']}
-                      value={data.type_tumeur} onChange={up('type_tumeur')} small />
+                <Tags options={['Solide','Liquide','Hémato.']} value={data.type_tumeur} onChange={up('type_tumeur')} small />
               </F>
               <F label="Latéralité">
                 <Tags options={['Droit','Gauche','Bilatéral','N/A']} value={data.lateralite} onChange={up('lateralite')} small />
@@ -361,9 +359,9 @@ export default function Page2() {
           {/* E — Récepteurs */}
           <SectionBlock label="E — Récepteurs hormonaux & HER2" color="#e67e22">
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-              <RecepteurRow label="ER (Œstrogène)"    value={data.recepteur_er}   onChange={up('recepteur_er')}   options={['positif','negatif','inconnu']}                labels={['Positif','Négatif','Inconnu']}   colors={['#00C9A7','#FF6B6B','#7A8BAD']} />
-              <RecepteurRow label="PR (Progestérone)" value={data.recepteur_pr}   onChange={up('recepteur_pr')}   options={['positif','negatif','inconnu']}                labels={['Positif','Négatif','Inconnu']}   colors={['#00C9A7','#FF6B6B','#7A8BAD']} />
-              <RecepteurRow label="HER2"              value={data.her2} onChange={up('her2')} options={['positif','equivoque','negatif','inconnu']}     labels={['Positif','Équivoque','Négatif','Inconnu']}     colors={['#00C9A7','#FFA26B','#FF6B6B','#7A8BAD']} />
+              <RecepteurRow label="ER (Œstrogène)"    value={data.recepteur_er} onChange={up('recepteur_er')} options={['positif','negatif','inconnu']} labels={['Positif','Négatif','Inconnu']} colors={['#00C9A7','#FF6B6B','#7A8BAD']} />
+              <RecepteurRow label="PR (Progestérone)" value={data.recepteur_pr} onChange={up('recepteur_pr')} options={['positif','negatif','inconnu']} labels={['Positif','Négatif','Inconnu']} colors={['#00C9A7','#FF6B6B','#7A8BAD']} />
+              <RecepteurRow label="HER2"              value={data.her2} onChange={up('her2')} options={['positif','equivoque','negatif','inconnu']} labels={['Positif','Équivoque','Négatif','Inconnu']} colors={['#00C9A7','#FFA26B','#FF6B6B','#7A8BAD']} />
             </div>
             {isTripleNeg && (
               <div style={s.tripleNeg}>⚠ Triple négatif détecté — ER⁻ PR⁻ HER2⁻</div>
