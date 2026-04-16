@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
+import { OngletDemandes } from './DemandeExamen';
+import PatientQRCode from './PatientQRCode';
 
 const API = 'http://localhost:8000/api';
 
@@ -386,6 +388,7 @@ export default function PatientDossier() {
     { id: 'apercu',        label: 'Aperçu',      icon: '📋' },
     { id: 'cancers',       label: `Cancers (${patient.cancers?.length || 0})`, icon: '🎗' },
     { id: 'consultations', label: `Consultations (${patient.consultations?.length || 0})`, icon: '📅' },
+    { id: 'demandes',      label: `Examens (${patient.cancers?.reduce((a,c) => a + (c.demandes_examens?.length || 0), 0) || 0})`, icon: '🔬' },
   ];
 
   return (
@@ -416,6 +419,7 @@ export default function PatientDossier() {
             <button style={s.btnGhost} onClick={() => navigate(`/patient/${id}/edit`)}>
               ✏ Modifier
             </button>
+            <PatientQRCode patient={patient} />
           </div>
         </div>
       </div>
@@ -652,6 +656,11 @@ export default function PatientDossier() {
               </div>
             )}
           </div>
+        )}
+
+        {/* ══ EXAMENS ══ */}
+        {activeTab === 'demandes' && (
+          <OngletDemandes patientId={id} cancers={patient.cancers || []} />
         )}
 
       </div>
