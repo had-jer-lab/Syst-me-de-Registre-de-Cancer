@@ -23,6 +23,17 @@ function fmtDate(str) {
   return `${d}/${m}/${y}`;
 }
 
+const TYPE_TUMEUR_MAP = {
+  'Solide': 'solide',
+  'Liquide': 'liquide',
+  'Hémato.': 'hematologique',
+};
+
+function normalizeTypeTumeur(value) {
+  if (!value) return '';
+  return TYPE_TUMEUR_MAP[value] || value.toLowerCase();
+}
+
 function score(arr, total) {
   return Math.round((arr.filter(v => v && String(v).trim()).length / total) * 100);
 }
@@ -176,6 +187,8 @@ export default function Page5() {
         data_source:         'manual',
         ...(data.commune_id  ? { commune:  parseInt(data.commune_id)  } : {}),
         ...(data.hospital_id ? { hospital: parseInt(data.hospital_id) } : {}),
+        ...(data.commune && !data.commune_id ? { commune_text: data.commune } : {}),
+        ...(data.wilaya ? { wilaya_text: data.wilaya } : {}),
       };
 
       const patient = await post('/patients/', patientPayload, token);
@@ -194,7 +207,8 @@ export default function Page5() {
         const cancerPayload = {
           patient:             patientId,
           ...(data.cancer_type_id ? { cancer_type: parseInt(data.cancer_type_id) } : {}),
-          type_tumeur:         data.type_tumeur        || '',
+          ...(data.organe ? { organe: data.organe } : {}),
+          type_tumeur:         normalizeTypeTumeur(data.type_tumeur) || '',
           sous_type:           data.sous_type          || '',
           lateralite:          data.lateralite         || '',
           cim10_code:          cimCode,

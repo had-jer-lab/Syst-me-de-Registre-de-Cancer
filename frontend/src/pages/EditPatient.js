@@ -196,6 +196,7 @@ export default function EditPatient() {
           const tMatch = tnm.match(/T[x0-4is]+/i);
           const nMatch = tnm.match(/N[x0-3]+/i);
           const mMatch = tnm.match(/M[x01]+/i);
+          console.log('[DEBUG EditPatient] Cancer loaded:', { date_diagnostic: c.date_diagnostic, tnm: c.tnm });
           setCancerForm({
             organe:           c.cancer_type?.name    || '',
             sous_type:        c.sous_type            || '',
@@ -204,12 +205,13 @@ export default function EditPatient() {
             tnmN:             nMatch?.[0]?.toUpperCase() || 'N0',
             tnmM:             mMatch?.[0]?.toUpperCase() || 'M0',
             grade:            c.grade                || '',
+            type_tumeur:      c.type_tumeur          || '',
             date_diagnostic:  c.date_diagnostic      || '',
             dernier_rdv:      data.dernier_rdv        || '',
             type_histologique: c.histology?.type_histologique || '',
-            localise:         true,
-            metastatique:     (c.metastases?.length || 0) > 0,
-            recidive:         false,
+            localise:         c.localise !== false,
+            metastatique:     (c.metastases?.length || 0) > 0 || c.metastatique === true,
+            recidive:         c.recidive === true,
           });
         }
       })
@@ -233,9 +235,15 @@ export default function EditPatient() {
         const cancerPayload = {
           patient:         parseInt(id),
           stade_clinique:  cancerForm.stade_clinique || '',
-          tnm:             [cancerForm.tnmT, cancerForm.tnmN, cancerForm.tnmM].join(''),
+          tnm:             [cancerForm.tnmT, cancerForm.tnmN, cancerForm.tnmM].filter(Boolean).join(''),
           grade:           cancerForm.grade || '',
-          date_diagnostic: cancerForm.date_diagnostic || null,
+          date_diagnostic: cancerForm.date_diagnostic ? cancerForm.date_diagnostic : null,
+          type_histologique: cancerForm.type_histologique || '',
+          type_tumeur: cancerForm.type_tumeur || '',
+          sous_type: cancerForm.sous_type || '',
+          localise: cancerForm.localise,
+          metastatique: cancerForm.metastatique,
+          recidive: cancerForm.recidive,
         };
 
         if (cancer?.id) {

@@ -98,6 +98,10 @@ class PatientListCreateView(generics.ListCreateAPIView):
     ordering_fields    = ['created_at', 'last_name', 'date_naissance']
 
     def get_serializer_class(self):
+        # Utiliser un serializer plus complet pour la création,
+        # afin que tous les champs du patient soient acceptés.
+        if self.request.method == 'POST':
+            return PatientDetailSerializer
         return PatientListSerializer
 
     def get_queryset(self):

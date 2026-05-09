@@ -184,12 +184,18 @@ class CancerSerializer(serializers.ModelSerializer):
 
 # ─── Cancer (écriture — create/update) ───────────────────────────────────────
 
+
 class CancerCreateSerializer(serializers.ModelSerializer):
+    organe = serializers.CharField(write_only=True, required=False, allow_blank=True)
+    date_diagnostic = serializers.DateField(required=False, allow_null=True)
+    date_symptomes = serializers.DateField(required=False, allow_null=True)
+
     class Meta:
         model  = Cancer
         fields = [
             'id', 'patient',
             'cancer_type',
+            'organe',
             'type_tumeur', 'sous_type', 'lateralite', 'cim10_code',
             'date_symptomes', 'date_diagnostic',
             'base_diagnostic',
@@ -202,6 +208,24 @@ class CancerCreateSerializer(serializers.ModelSerializer):
             'recepteur_er', 'recepteur_pr', 'her2',
             'data_source',
         ]
+
+    def create(self, validated_data):
+        organe = validated_data.pop('organe', None)
+        if organe and not validated_data.get('cancer_type'):
+            cancer_type = CancerType.objects.filter(name__iexact=organe).first()
+            if not cancer_type:
+                cancer_type = CancerType.objects.create(name=organe)
+            validated_data['cancer_type'] = cancer_type
+        return super().create(validated_data)
+
+    def update(self, instance, validated_data):
+        organe = validated_data.pop('organe', None)
+        if organe and not validated_data.get('cancer_type'):
+            cancer_type = CancerType.objects.filter(name__iexact=organe).first()
+            if not cancer_type:
+                cancer_type = CancerType.objects.create(name=organe)
+            validated_data['cancer_type'] = cancer_type
+        return super().update(instance, validated_data)
 
     def validate_patient(self, patient):
         request = self.context.get('request')
@@ -248,6 +272,7 @@ class PatientListSerializer(serializers.ModelSerializer):
             'date_naissance', 'age', 'sexe',
             'phone', 'email',
             'situation_familiale', 'profession',
+            'adresse',
             'commune', 'commune_name', 'wilaya_name',
             'hospital', 'hospital_name',
             'couverture_sociale',
@@ -292,6 +317,8 @@ class PatientDetailSerializer(serializers.ModelSerializer):
     medecin_nom   = serializers.SerializerMethodField()
     cancers       = CancerSerializer(many=True, read_only=True)
     consultations = ConsultationSerializer(many=True, read_only=True)
+    commune_text  = serializers.CharField(write_only=True, required=False, allow_blank=True)
+    wilaya_text   = serializers.CharField(write_only=True, required=False, allow_blank=True)
 
     class Meta:
         model  = Patient
@@ -307,6 +334,7 @@ class PatientDetailSerializer(serializers.ModelSerializer):
             'created_by', 'medecin_nom',
             'is_merged', 'merged_into_patient',
             'data_source', 'created_at', 'updated_at',
+            'commune_text', 'wilaya_text',
             'cancers', 'consultations',
         ]
         read_only_fields = ['numero_dossier', 'created_by', 'created_at', 'updated_at']
@@ -316,9 +344,32 @@ class PatientDetailSerializer(serializers.ModelSerializer):
             return f"Dr. {obj.created_by.prenom} {obj.created_by.nom}"
         return '—'
 
+    def _resolve_commune(self, validated_data):
+        commune_text = validated_data.pop('commune_text', None)
+        wilaya_text = validated_data.pop('wilaya_text', None)
+        if commune_text and not validated_data.get('commune'):
+            commune = None
+            if wilaya_text:
+                wilaya = Wilaya.objects.filter(name__iexact=wilaya_text).first()
+                if not wilaya:
+                    wilaya = Wilaya.objects.create(name=wilaya_text)
+                commune = Commune.objects.filter(name__iexact=commune_text, wilaya=wilaya).first()
+                if not commune:
+                    commune = Commune.objects.create(name=commune_text, wilaya=wilaya)
+            else:
+                commune = Commune.objects.filter(name__iexact=commune_text).first()
+            if commune:
+                validated_data['commune'] = commune
+        return validated_data
+
     def create(self, validated_data):
+        validated_data = self._resolve_commune(validated_data)
         validated_data['created_by'] = self.context['request'].user
         return super().create(validated_data)
+
+    def update(self, instance, validated_data):
+        validated_data = self._resolve_commune(validated_data)
+        return super().update(instance, validated_data)
 
 
 # ─── Death ────────────────────────────────────────────────────────────────────
