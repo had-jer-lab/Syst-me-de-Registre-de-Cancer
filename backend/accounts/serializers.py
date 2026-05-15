@@ -1,4 +1,4 @@
-from rest_framework import serializers
+﻿from rest_framework import serializers
 from django.contrib.auth import authenticate
 from .models import User, LoginLog
 
@@ -58,23 +58,57 @@ class LoginSerializer(serializers.Serializer):
     password = serializers.CharField(write_only=True)
 
     def validate(self, data):
-        user = authenticate(username=data['email'], password=data['password'])
-        if not user:
-            raise serializers.ValidationError("Email ou mot de passe incorrect")
+        email = data.get('email')
+        password = data.get('password')
+        
+        try:
+            user = User.objects.get(email=email)
+        except User.DoesNotExist:
+            raise serializers.ValidationError("Email ou mot de passe invalide")
+        
+        if not user.check_password(password):
+            raise serializers.ValidationError("Email ou mot de passe invalide")
+        
         if not user.is_active:
-            raise serializers.ValidationError("Compte désactivé")
-        if user.statut != 'actif':
-            raise serializers.ValidationError("Compte suspendu ou inactif")
+            raise serializers.ValidationError("Ce compte est désactivé")
+        
+        if hasattr(user, 'statut') and user.statut not in ('', None, 'actif'):
+            raise serializers.ValidationError("Ce compte est désactivé")
+        
         data['user'] = user
         return data
 
 
-class LoginLogSerializer(serializers.ModelSerializer):
-    user_name = serializers.SerializerMethodField()
+class UserSerializer(serializers.ModelSerializer):
+    """Sérialiseur pour le modèle User"""
+    full_name = serializers.SerializerMethodField()
+
+    def get_full_name(self, obj):
+        return f"{obj.prenom or ''} {obj.nom or ''}".strip() or obj.email
 
     class Meta:
-        model  = LoginLog
-        fields = ['id', 'user_name', 'action', 'detail', 'ip_address', 'timestamp']
+        model = User
+        fields = [
+            'id', 'email', 'nom', 'prenom', 'full_name',
+            'role', 'specialite', 'telephone',
+            'etablissement', 'wilaya', 'statut',
+            'perm_read', 'perm_write', 'perm_rcp',
+            'perm_lab', 'perm_stats', 'perm_import',
+            'is_active', 'is_staff', 'created_at',
+        ]
+        read_only_fields = ['id', 'created_at']
+
+
+class LoginLogSerializer(serializers.ModelSerializer):
+    """Sérialiseur pour les logs de connexion"""
+    user_name = serializers.SerializerMethodField()
+    user_email = serializers.CharField(source='user.email', read_only=True)
 
     def get_user_name(self, obj):
-        return str(obj.user) if obj.user else 'Utilisateur supprimé'
+        u = obj.user
+        return f"{u.prenom or ''} {u.nom or ''}".strip() or u.email
+
+    class Meta:
+        model = LoginLog
+        fields = ['id', 'user', 'user_name', 'user_email', 'action', 'ip_address', 'detail', 'timestamp']
+        read_only_fields = ['id', 'timestamp']

@@ -8,12 +8,15 @@ import AuthPage   from './pages/AuthPage';
 import Dashboard  from './pages/Dashboard';
 import ImportData from './pages/ImportData';
 import DiscussionRCP from './pages/DiscussionRCP';
-import EditPatient from './pages/EditPatient';
-import Page1 from './pages/Page1';
-import Page2 from './pages/Page2';
-import Page3 from './pages/Page3';
-import Page4 from './pages/Page4';
-import Page5 from './pages/Page5';
+import EditPatient   from './pages/EditPatient';
+import DemandeExamen  from './pages/DemandeExamen';
+import Page1         from './pages/Page1';
+import Page2         from './pages/Page2';
+import Page3         from './pages/Page3';
+import Page4         from './pages/Page4';
+import Page5         from './pages/Page5';
+import PatientDossier from './pages/PatientDossier';
+import PatientPublicForm from './pages/PatientPublicForm';
 
 
 export default function App() {
@@ -38,11 +41,10 @@ export default function App() {
           <Route path="/page3"     element={<Page3 />} />
           <Route path="/page4"     element={<Page4 />} />
           <Route path="/page5"     element={<Page5 />} />
+          <Route path="/patient/:id" element={<PatientDossier />} />
           <Route path="/patient/:id/edit" element={<EditPatient />} />
-
-
-          {/* Fallback */}
-          <Route path="*"          element={<Navigate to="/auth" replace />} />
+          <Route path="/patient-form/:token" element={<PatientPublicForm />} />
+          <Route path="*"           element={<Navigate to="/auth" replace />} />
         </Routes>
       </BrowserRouter>
     </PatientProvider>
