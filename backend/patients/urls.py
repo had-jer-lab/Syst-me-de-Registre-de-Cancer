@@ -1,8 +1,10 @@
-"""
-patients/urls.py — URLs complètes avec endpoints traitements
-"""
+# ══════════════════════════════════════════
+# patients/urls.py
+# ══════════════════════════════════════════
 from django.urls import path
 from .views import (
+    VoiceParseView,
+    IDCardScanView,   # ✅ مهم
     WilayaListView, CommuneListView, HospitalListView,
     CancerTypeListView,
     PatientListCreateView, PatientDetailView,
@@ -11,6 +13,8 @@ from .views import (
     TreatmentListCreateView, TreatmentDetailView,
     ConsultationListCreateView,
 )
+
+from .views import WhisperParseView
 
 urlpatterns = [
     # ── Référentiels ──────────────────────────────────────────────────────────
@@ -32,36 +36,6 @@ urlpatterns = [
     path('<int:patient_pk>/cancers/<int:pk>/',
          CancerDetailView.as_view(),      name='patient-cancer-detail'),
 
-    # ── Traitements (nested sous patient/cancer) ──────────────────────────────
-    path('<int:patient_pk>/cancers/<int:cancer_pk>/treatments/',
-         TreatmentListCreateView.as_view(), name='cancer-treatments'),
-    path('<int:patient_pk>/cancers/<int:cancer_pk>/treatments/<int:pk>/',
-         TreatmentDetailView.as_view(),     name='cancer-treatment-detail'),
-
-    # ── Consultations (nested sous patient) ───────────────────────────────────
-    path('<int:patient_pk>/consultations/',
-         ConsultationListCreateView.as_view(), name='patient-consultations'),
-]
-
-
-
-# ─── À ajouter dans patients/urls.py ─────────────────────────────────────────
-
-from .views import (
-    DemandeExamenListCreateView,   # ajouter à l'import
-    DemandeExamenDetailView,       # ajouter à l'import
-    AllDemandesView,               # ajouter à l'import
-)
-
-# Ajouter dans urlpatterns :
-urlpatterns += [
-    # Demandes par patient
-    path('<int:patient_pk>/demandes/',
-         DemandeExamenListCreateView.as_view(), name='patient-demandes'),
-    path('<int:patient_pk>/demandes/<int:pk>/',
-         DemandeExamenDetailView.as_view(),     name='patient-demande-detail'),
-
-    # Vue globale (biologiste / admin)
-    path('demandes/',
-         AllDemandesView.as_view(),             name='all-demandes'),
+    # ── Nested : Consultations ────────────────────────────
+    path('<int:patient_pk>/consultations/',  ConsultationListCreateView.as_view(), name='patient-consultations'),
 ]

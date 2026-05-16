@@ -253,6 +253,24 @@ class ConsultationSerializer(serializers.ModelSerializer):
         return super().create(validated_data)
 
 
+# ─── 🆕 Habitudes & Facteurs de risque ───────────────────────────────────────
+
+class PatientHabitSerializer(serializers.ModelSerializer):
+    name = serializers.CharField(source='habit.name', read_only=True)
+
+    class Meta:
+        model  = PatientHabit
+        fields = ['id', 'name', 'frequency', 'duration_years']
+
+
+class PatientRiskFactorSerializer(serializers.ModelSerializer):
+    name = serializers.CharField(source='risk_factor.name', read_only=True)
+
+    class Meta:
+        model  = PatientRiskFactor
+        fields = ['id', 'name']
+
+
 # ─── Patient liste (léger) ────────────────────────────────────────────────────
 
 class PatientListSerializer(serializers.ModelSerializer):
@@ -263,6 +281,7 @@ class PatientListSerializer(serializers.ModelSerializer):
     hospital_name = serializers.CharField(source='hospital.name', read_only=True)
     medecin_nom   = serializers.SerializerMethodField()
     dernier_cancer = serializers.SerializerMethodField()
+    cancers       = CancerSerializer(many=True, read_only=True)
 
     class Meta:
         model  = Patient
@@ -278,7 +297,7 @@ class PatientListSerializer(serializers.ModelSerializer):
             'couverture_sociale',
             'created_by', 'medecin_nom',
             'data_source', 'created_at', 'updated_at',
-            'dernier_cancer',
+            'dernier_cancer', 'cancers'
         ]
         read_only_fields = ['numero_dossier', 'created_by', 'created_at', 'updated_at']
 
@@ -317,8 +336,6 @@ class PatientDetailSerializer(serializers.ModelSerializer):
     medecin_nom   = serializers.SerializerMethodField()
     cancers       = CancerSerializer(many=True, read_only=True)
     consultations = ConsultationSerializer(many=True, read_only=True)
-    commune_text  = serializers.CharField(write_only=True, required=False, allow_blank=True)
-    wilaya_text   = serializers.CharField(write_only=True, required=False, allow_blank=True)
 
     class Meta:
         model  = Patient
@@ -336,6 +353,8 @@ class PatientDetailSerializer(serializers.ModelSerializer):
             'data_source', 'created_at', 'updated_at',
             'commune_text', 'wilaya_text',
             'cancers', 'consultations',
+            # 🆕
+            'habits', 'risk_factors',
         ]
         read_only_fields = ['numero_dossier', 'created_by', 'created_at', 'updated_at']
 
@@ -367,9 +386,24 @@ class PatientDetailSerializer(serializers.ModelSerializer):
         validated_data['created_by'] = self.context['request'].user
         return super().create(validated_data)
 
-    def update(self, instance, validated_data):
-        validated_data = self._resolve_commune(validated_data)
-        return super().update(instance, validated_data)
+
+# ─── Cancer (create/update) ────────────────────────────────────────────────
+
+class CancerCreateSerializer(serializers.ModelSerializer):
+    class Meta:
+        model  = Cancer
+        fields = [
+            'id', 'patient', 'cancer_type',
+            'stade_clinique', 'stade_pathologique', 'tnm', 'grade',
+            'date_diagnostic', 'data_source',
+        ]
+
+    def validate_patient(self, patient):
+        # Seul le médecin référent peut ajouter un cancer
+        request = self.context.get('request')
+        if request and patient.created_by != request.user and not request.user.is_staff:
+            raise serializers.ValidationError("Accès refusé à ce patient.")
+        return patient
 
 
 # ─── Death ────────────────────────────────────────────────────────────────────

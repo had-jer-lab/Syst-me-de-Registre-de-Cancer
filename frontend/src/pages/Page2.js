@@ -2,9 +2,7 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { usePatient } from '../context/PatientContext';
 import Layout from '../components/Layout';
-import { PageHeader, BtnRow } from '../components/FormFields';
-
-/* ─── Données ─────────────────────────────────────────────────────────────── */
+import { SC, Field, Select, TagGroup, CircleGroup, Toggle, PageHeader, BtnRow } from '../components/FormFields';
 
 const ORGANES = [
   'Sein','Poumon','Côlon / Rectum','Prostate','Col de l\'utérus','Thyroïde',
@@ -240,133 +238,194 @@ export default function Page2() {
         {/* ════ COLONNE GAUCHE ════ */}
         <div style={s.col}>
 
-          {/* A — Localisation */}
-          <SectionBlock label="A — Localisation anatomique" color="#e74c3c">
-            <F label="Organe principal" required>
-              <select style={s.input} value={data.organe || ''} onChange={e => update({ organe: e.target.value, sous_type: '' })}>
-                <option value="">Sélectionner l'organe…</option>
-                {ORGANES.map(o => <option key={o} value={o}>{o}</option>)}
-              </select>
-            </F>
+          {/* Type de tumeur */}
+          <SC label="Type de tumeur">
+            <TagGroup
+              options={['Solide','Liquide','Hématologique']}
+              value={data.typeT}
+              onChange={v => update({ typeT: v })}
+            />
+          </SC>
 
-            {data.organe && (
-              <F label={`Sous-type — ${data.organe}`} mt={12}>
-                <Tags options={sousTypes} value={data.sous_type} onChange={up('sous_type')} small />
-              </F>
-            )}
+          {/* Organe */}
+          <SC label="Organe / Topographie">
+            <Field label="Organe principal">
+              <Select
+                options={ORGANES}
+                placeholder="Sélectionner…"
+                value={data.organe}
+                onChange={handleOrganeChange}
+              />
+            </Field>
 
-            <Row cols={2} mt={12}>
-              <F label="Type de tumeur">
-                <Tags options={['Solide','Liquide','Hémato.']} value={data.type_tumeur} onChange={up('type_tumeur')} small />
-              </F>
-              <F label="Latéralité">
-                <Tags options={['Droit','Gauche','Bilatéral','N/A']} value={data.lateralite} onChange={up('lateralite')} small />
-              </F>
-            </Row>
-
-            <F label="Code CIM-10 (optionnel)" mt={12}>
-              <div style={{ display: 'flex', gap: 8 }}>
-                <select style={{ ...s.input, flex: 1 }} value={data.cim10_code || ''} onChange={upE('cim10_code')}>
-                  <option value="">Sélectionner…</option>
-                  {CIM10_LIST.map(c => <option key={c.code} value={c.code}>{c.label}</option>)}
-                  <option value="__manual__">Autre (saisir)</option>
-                </select>
-                {data.cim10_code === '__manual__' && (
-                  <input style={{ ...s.input, width: 110 }} placeholder="ex: C79.1"
-                    value={data.cim10_manual || ''} onChange={upE('cim10_manual')} />
-                )}
+            {/* ✅ SOUS-TYPE — toujours visible, message d'aide si pas d'organe choisi */}
+            <div style={s.stWrap}>
+              <div style={s.stHeader}>
+                <span style={s.stDot} />
+                <span style={s.stTitle}>
+                  {data.organe
+                    ? <>Sous-type &nbsp;·&nbsp; <b style={{ color: 'var(--primary)' }}>{data.organe}</b></>
+                    : 'Sous-type de cancer'}
+                </span>
               </div>
-            </F>
-          </SectionBlock>
 
-          {/* B — Histologie */}
-          <SectionBlock label="B — Histologie" color="#9b59b6">
-            <F label="Type histologique">
-              <Sel options={HISTO_TYPES} placeholder="Sélectionner…" value={data.type_histologique} onChange={up('type_histologique')} />
-            </F>
-            <F label="Grade histologique" mt={10}>
-              <Sel options={GRADE_HISTO} placeholder="—" value={data.grade_histologique} onChange={up('grade_histologique')} />
-            </F>
-            <F label="N° bloc anatomopathologique" mt={10}>
-              <Input value={data.bloc_anapath} onChange={up('bloc_anapath')} placeholder="ex: AP-2026-04521" />
-            </F>
-          </SectionBlock>
+              {!data.organe ? (
+                <div style={s.stPlaceholder}>
+                  <span style={s.stPlaceholderIcon}>☝️</span>
+                  Sélectionnez d'abord l'organe principal
+                </div>
+              ) : (
+                <TagGroup
+                  options={sousTypesDispos}
+                  value={data.sous_type}
+                  onChange={v => update({ sous_type: v })}
+                />
+              )}
+            </div>
 
-          {/* C — Base de diagnostic */}
-          <SectionBlock label="C — Base de diagnostic" color="#2980b9">
-            <MultiCheck options={BASE_DIAG} value={data.base_diagnostic || []} onChange={up('base_diagnostic')} />
-          </SectionBlock>
+            <Field label="Latéralité" style={{ marginTop: 14 }}>
+              <TagGroup
+                options={['Droit','Gauche','Bilatéral','N / A']}
+                value={data.lat}
+                onChange={v => update({ lat: v })}
+              />
+            </Field>
+
+            <div style={{ marginTop: 14 }}>
+              <div className="fl" style={{ marginBottom: 8 }}>Niveau topographique</div>
+              <CircleGroup
+                options={['1','2','3','4']}
+                value={data.topo}
+                onChange={v => update({ topo: v })}
+              />
+            </div>
+          </SC>
+
+          {/* ✅ STADE TNM — les 3 selects sur UNE SEULE ligne */}
+          <SC label="Stade TNM">
+            <CircleGroup
+              options={['I','II','III','IV']}
+              value={data.stade}
+              onChange={v => update({ stade: v })}
+            />
+
+            {/* ── Les 3 colonnes TNM alignées ── */}
+            <div style={{ display:'flex', gap:12, marginTop:14, width:'100%' }}>
+
+              <div style={{ flex:'1 1 0', minWidth:0 }}>
+                <div style={s.tnmLabel}>T — Tumeur</div>
+                <Select options={TNM_T} value={data.tnmT} onChange={set('tnmT')} />
+              </div>
+
+              <div style={{ flex:'1 1 0', minWidth:0 }}>
+                <div style={s.tnmLabel}>N — Ganglion</div>
+                <Select options={TNM_N} value={data.tnmN} onChange={set('tnmN')} />
+              </div>
+
+              <div style={{ flex:'1 1 0', minWidth:0 }}>
+                <div style={s.tnmLabel}>M — Métastase</div>
+                <Select options={TNM_M} value={data.tnmM} onChange={set('tnmM')} />
+              </div>
+
+            </div>
+          </SC>
+
+          {/* Traitement en cours */}
+          <SC label="Traitement en cours">
+            <TagGroup
+              options={['Chimiothérapie','Radiothérapie','Chirurgie','Immunothérapie','Hormonothérapie','Thérapie ciblée','Aucun']}
+              value={data.trtActuel}
+              onChange={v => update({ trtActuel: v })}
+            />
+          </SC>
 
         </div>
 
         {/* ════ COLONNE DROITE ════ */}
         <div style={s.col}>
 
-          {/* D — TNM & Stade */}
-          <SectionBlock label="D — Classification TNM & Stade" color="#27ae60">
-            <F label="Stade clinique">
-              <div style={{ display: 'flex', gap: 8 }}>
-                {STADES.map(st => (
-                  <button key={st} type="button"
-                    style={{ ...s.stadeBtn, ...(data.stade_clinique === st ? s.stadeBtnSel : {}) }}
-                    onClick={() => update({ stade_clinique: data.stade_clinique === st ? '' : st })}
-                  >
-                    {st}
-                  </button>
-                ))}
-              </div>
-            </F>
-
-            <div style={{ display: 'flex', gap: 10, marginTop: 14 }}>
-              {[
-                { key: 'tnmT', label: 'T — Tumeur', opts: TNM_T },
-                { key: 'tnmN', label: 'N — Ganglion', opts: TNM_N },
-                { key: 'tnmM', label: 'M — Métastase', opts: TNM_M },
-              ].map(({ key, label, opts }) => (
-                <div key={key} style={{ flex: 1, minWidth: 0 }}>
-                  <div style={s.tnmLabel}>{label}</div>
-                  <select style={s.input} value={data[key] || 'T0'} onChange={upE(key)}>
-                    {opts.map(o => <option key={o} value={o}>{o}</option>)}
-                  </select>
-                </div>
-              ))}
+          {/* Localisation */}
+          <SC label="Statut de localisation">
+            <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
+              <Toggle label="Localisé"     checked={data.localise}     onChange={v => update({ localise: v })} />
+              <Toggle label="Métastatique" checked={data.metastatique} onChange={v => update({ metastatique: v })} />
+              <Toggle label="Récidive"     checked={data.recidive}     onChange={v => update({ recidive: v })} />
             </div>
+          </SC>
 
-            <Row cols={2} mt={12}>
-              <F label="Taille tumorale">
-                <Input value={data.taille_tumorale} onChange={up('taille_tumorale')} type="number" placeholder="ex: 3.5" unit="cm" />
-              </F>
-              <F label="Ganglions envahis">
-                <Input value={data.ganglions_envahis} onChange={up('ganglions_envahis')} type="number" placeholder="ex: 2" unit="N+" />
-              </F>
-            </Row>
+          {/* Dates */}
+          <SC label="Date du diagnostic">
+            <Field label="Date de découverte">
+              <input className="fi" type="date" value={data.diagDate} onChange={set('diagDate')} />
+            </Field>
+            <Field label="Date de la première consultation" style={{ marginTop:10 }}>
+              <input className="fi" type="date" value={data.consultDate} onChange={set('consultDate')} />
+            </Field>
 
-            <F label="Statut" mt={12}>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                <Toggle label="Localisé"     checked={!!data.localise}     onChange={up('localise')} />
-                <Toggle label="Métastatique" checked={!!data.metastatique} onChange={up('metastatique')} />
-                <Toggle label="Récidive"     checked={!!data.recidive}     onChange={up('recidive')} />
+            {/* ✅ DATE DU DERNIER RDV */}
+            <Field label="Date de la dernière consultation" style={{ marginTop:10 }}>
+              <div style={s.rdvRow}>
+                <input
+                  className="fi"
+                  type="date"
+                  value={data.dernier_rdv}
+                  onChange={set('dernier_rdv')}
+                  style={{ flex: 1 }}
+                />
+                {data.dernier_rdv && (
+                  <span style={s.rdvPill}>
+                    {(() => {
+                      const diff = Math.floor(
+                        (new Date() - new Date(data.dernier_rdv)) / 86400000
+                      );
+                      if (diff === 0) return '🟢 Aujourd\'hui';
+                      if (diff <= 7)  return `🟢 ${diff}j`;
+                      if (diff <= 30) return `🟡 ${diff}j`;
+                      if (diff <= 365) return `🟠 ${Math.floor(diff/30)} mois`;
+                      return `🔴 ${Math.floor(diff/365)} an(s)`;
+                    })()}
+                  </span>
+                )}
               </div>
-            </F>
+            </Field>
+          </SC>
 
-            {data.metastatique && (
-              <F label="Sites métastatiques" mt={12}>
-                <MultiTags options={SITES_META} value={data.sites_metastatiques || []} onChange={up('sites_metastatiques')} />
-              </F>
-            )}
-          </SectionBlock>
+          {/* Histologie */}
+          <SC label="Histologie / Type moléculaire">
+            <Field label="Type histologique">
+              <Select options={HISTO_TYPES} placeholder="Sélectionner…" value={data.histo} onChange={set('histo')} />
+            </Field>
+            <div className="field-row c2" style={{ marginTop:12 }}>
+              <Field label="Taille tumorale (cm)">
+                <div className="fi-wrap">
+                  <input className="fi" type="number" step="0.1" placeholder="ex: 4.2" value={data.taille} onChange={set('taille')} />
+                  <span className="fi-unit">cm</span>
+                </div>
+              </Field>
+            </div>
+            <Field label="Récepteurs hormonaux (si sein)" style={{ marginTop:12 }}>
+              <TagGroup
+                options={['RH+','RH−','HER2+','HER2−','Triple négatif']}
+                value={data.recepteurs}
+                onChange={v => update({ recepteurs: v })}
+              />
+            </Field>
+          </SC>
 
-          {/* E — Récepteurs */}
-          <SectionBlock label="E — Récepteurs hormonaux & HER2" color="#e67e22">
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-              <RecepteurRow label="ER (Œstrogène)"    value={data.recepteur_er} onChange={up('recepteur_er')} options={['positif','negatif','inconnu']} labels={['Positif','Négatif','Inconnu']} colors={['#00C9A7','#FF6B6B','#7A8BAD']} />
-              <RecepteurRow label="PR (Progestérone)" value={data.recepteur_pr} onChange={up('recepteur_pr')} options={['positif','negatif','inconnu']} labels={['Positif','Négatif','Inconnu']} colors={['#00C9A7','#FF6B6B','#7A8BAD']} />
-              <RecepteurRow label="HER2"              value={data.her2} onChange={up('her2')} options={['positif','equivoque','negatif','inconnu']} labels={['Positif','Équivoque','Négatif','Inconnu']} colors={['#00C9A7','#FFA26B','#FF6B6B','#7A8BAD']} />
+          {/* Médecin référent */}
+          <SC label="Médecin référent">
+            <div className="field-row c2">
+              <Field label="Service">
+                <input className="fi" type="text" placeholder="ex: Oncologie" value={data.service} onChange={set('service')} />
+              </Field>
+              <Field label="Médecin">
+                <input className="fi" type="text" placeholder="Dr. Nom" value={data.medecin} onChange={set('medecin')} />
+              </Field>
             </div>
             {isTripleNeg && (
               <div style={s.tripleNeg}>⚠ Triple négatif détecté — ER⁻ PR⁻ HER2⁻</div>
             )}
-          </SectionBlock>
+          </SC>
 
           {/* F — Dates */}
           <SectionBlock label="F — Dates clés" color="#16a085">
@@ -414,118 +473,90 @@ export default function Page2() {
   );
 }
 
-function getRdvLabel(dateStr) {
-  const diff = Math.floor((new Date() - new Date(dateStr)) / 86400000);
-  if (diff === 0)   return '🟢 Aujourd\'hui';
-  if (diff <= 7)    return `🟢 ${diff}j`;
-  if (diff <= 30)   return `🟡 ${diff}j`;
-  if (diff <= 365)  return `🟠 ${Math.floor(diff/30)} mois`;
-  return `🔴 ${Math.floor(diff/365)} an(s)`;
-}
-
-/* ─── Styles ──────────────────────────────────────────────────────────────── */
+/* ─── Styles ─────────────────────────────────────────────────────────────────── */
 const s = {
-  twoCol: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20, marginTop: 4 },
-  col:    { display: 'flex', flexDirection: 'column', gap: 14 },
-
-  block: {
-    background: '#fff',
-    border: '1.5px solid #E8ECF5',
-    borderRadius: 14, overflow: 'hidden',
-    boxShadow: '0 2px 12px rgba(0,0,0,0.04)',
+  /* ── sous-type ── */
+  stWrap: {
+    marginTop: 14,
+    padding: '14px 16px',
+    background: 'linear-gradient(135deg, rgba(74,108,247,0.04), rgba(0,201,167,0.03))',
+    border: '1.5px solid rgba(74,108,247,0.18)',
+    borderRadius: 12,
   },
-  blockHeader: {
-    padding: '12px 16px 10px',
-    borderBottom: '1px solid #F0F3FA',
-    borderLeft: '4px solid #4A6CF7',
-    background: '#FAFBFF',
+  stHeader: {
+    display: 'flex', alignItems: 'center', gap: 8, marginBottom: 11,
   },
-  blockLabel: {
-    fontSize: 10.5, fontWeight: 900, textTransform: 'uppercase',
-    letterSpacing: '1.2px', color: '#4A6CF7',
+  stDot: {
+    width: 8, height: 8, borderRadius: '50%',
+    background: 'linear-gradient(135deg,#4A6CF7,#00C9A7)',
+    flexShrink: 0,
   },
-  blockBody: { padding: '16px' },
-
-  label: { fontSize: 11.5, fontWeight: 700, color: '#64748B', letterSpacing: '0.2px' },
-
-  input: {
-    width: '100%', padding: '9px 12px', boxSizing: 'border-box',
-    background: '#F8FAFF', border: '1.5px solid #E2E8F5',
-    borderRadius: 9, fontSize: 13, color: '#1E293B',
-    fontFamily: "'Nunito', sans-serif", outline: 'none',
-    transition: 'border-color 0.15s',
+  stTitle: {
+    fontSize: 11, fontWeight: 800, color: 'var(--text-muted)',
+    textTransform: 'uppercase', letterSpacing: '1px',
   },
-  unit: {
-    position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)',
-    fontSize: 11, fontWeight: 800, color: '#94A3B8', pointerEvents: 'none',
+  stPlaceholder: {
+    display: 'flex', alignItems: 'center', gap: 8,
+    fontSize: 12, fontWeight: 600, color: 'var(--text-muted)',
+    fontStyle: 'italic', padding: '6px 0',
   },
-
-  tag: {
-    padding: '6px 14px', borderRadius: 30, fontSize: 12.5, fontWeight: 700,
-    border: '1.5px solid #E2E8F5', background: '#fff',
-    color: '#64748B', cursor: 'pointer', transition: '0.12s',
-    fontFamily: "'Nunito', sans-serif",
+  stPlaceholderIcon: { fontSize: 16 },
+  stGrid: {
+    display: 'flex', flexWrap: 'wrap', gap: 7,
   },
-  tagSmall: { padding: '5px 11px', fontSize: 12 },
-  tagSel: { background: '#4A6CF7', borderColor: '#4A6CF7', color: '#fff', boxShadow: '0 3px 10px rgba(74,108,247,0.3)' },
-  tagSelPurple: { background: '#9b59b6', borderColor: '#9b59b6', color: '#fff', boxShadow: '0 3px 10px rgba(155,89,182,0.3)' },
-
-  stadeBtn: {
-    flex: 1, padding: '9px 0', borderRadius: 10, textAlign: 'center',
-    border: '2px solid #E2E8F5', background: '#F8FAFF',
-    fontSize: 14, fontWeight: 900, cursor: 'pointer', color: '#94A3B8',
-    fontFamily: "'Poppins', sans-serif", transition: '0.15s',
-  },
-  stadeBtnSel: { background: '#27ae60', borderColor: '#27ae60', color: '#fff', boxShadow: '0 4px 14px rgba(39,174,96,0.35)' },
-
-  tnmLabel: { fontSize: 10.5, fontWeight: 900, textAlign: 'center', color: '#4A6CF7', letterSpacing: '0.8px', marginBottom: 5, textTransform: 'uppercase' },
-
-  checkRow: {
-    display: 'flex', alignItems: 'center', gap: 10,
-    padding: '8px 12px', borderRadius: 8,
-    border: '1.5px solid #E8ECF5', background: '#FAFBFF',
+  stChip: {
+    padding: '5px 12px', borderRadius: 20,
+    border: '1.5px solid var(--border)',
+    background: 'var(--card)',
+    color: 'var(--text-muted)',
+    fontSize: 12, fontWeight: 700,
     cursor: 'pointer',
-  },
-  checkbox: {
-    width: 18, height: 18, borderRadius: 5, flexShrink: 0,
-    border: '2px solid #CBD5E1', background: '#fff',
-    display: 'flex', alignItems: 'center', justifyContent: 'center',
+    fontFamily: "'Nunito', sans-serif",
     transition: '0.15s',
   },
-  checkboxOn: { background: '#4A6CF7', borderColor: '#4A6CF7' },
-  checkMark: { fontSize: 11, color: '#fff', fontWeight: 900 },
-  checkLabel: { fontSize: 12.5, fontWeight: 600, color: '#334155' },
-
-  toggleRow: { display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', padding: '8px 12px', borderRadius: 8, border: '1.5px solid #E8ECF5', background: '#FAFBFF' },
-  toggleTrack: { width: 40, height: 21, borderRadius: 30, background: '#CBD5E1', cursor: 'pointer', position: 'relative', transition: '0.2s', flexShrink: 0 },
-  toggleOn: { background: '#4A6CF7' },
-  toggleThumb: { position: 'absolute', top: 2.5, left: 2.5, width: 16, height: 16, borderRadius: '50%', background: '#fff', transition: '0.2s', boxShadow: '0 1px 4px rgba(0,0,0,0.15)' },
-  toggleThumbOn: { left: 21.5 },
-  toggleLabel: { fontSize: 13, fontWeight: 700, color: '#334155' },
-
-  recRow: {
-    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-    padding: '10px 14px', borderRadius: 9,
-    border: '1.5px solid #E8ECF5', background: '#FAFBFF',
+  stChipSel: {
+    background: 'var(--primary)', borderColor: 'var(--primary)',
+    color: '#fff', boxShadow: '0 3px 10px rgba(74,108,247,0.28)',
   },
-  recLabel: { fontSize: 13, fontWeight: 700, color: '#334155', minWidth: 145 },
-  recBtn: {
-    padding: '5px 11px', borderRadius: 20, fontSize: 12, fontWeight: 700,
-    border: '1.5px solid #E2E8F5', background: '#fff',
-    cursor: 'pointer', color: '#94A3B8', transition: '0.12s',
-    fontFamily: "'Nunito', sans-serif",
+  stConfirm: {
+    marginTop: 10, display: 'flex', alignItems: 'center', gap: 7,
+    fontSize: 12, fontWeight: 700, color: 'var(--primary)',
+    padding: '5px 11px',
+    background: 'rgba(74,108,247,0.08)',
+    borderRadius: 8, width: 'fit-content',
+  },
+  stCheck: {
+    width: 18, height: 18, borderRadius: '50%',
+    background: 'var(--primary)', color: '#fff',
+    fontSize: 10, fontWeight: 900,
+    display: 'flex', alignItems: 'center', justifyContent: 'center',
+    flexShrink: 0,
   },
 
-  tripleNeg: {
-    marginTop: 10, padding: '10px 14px', borderRadius: 9,
-    background: 'rgba(255,107,107,0.07)', border: '1.5px solid rgba(255,107,107,0.25)',
-    fontSize: 12.5, fontWeight: 800, color: '#e74c3c',
+  /* ✅ TNM — 3 colonnes sur une ligne */
+  tnmRow: {
+    display: 'grid',
+    gridTemplateColumns: '1fr 1fr 1fr',
+    gap: 12,
+    marginTop: 14,
+  },
+  tnmCol: {
+    display: 'flex', flexDirection: 'column', gap: 6,
+  },
+  tnmLabel: {
+    fontSize: 12, fontWeight: 900, textAlign: 'center',
+    color: 'var(--primary)', letterSpacing: '0.5px',
   },
 
-  rdvBadge: {
-    position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)',
-    fontSize: 10.5, fontWeight: 800, whiteSpace: 'nowrap', pointerEvents: 'none',
-    background: 'rgba(74,108,247,0.08)', color: '#4A6CF7',
-    padding: '2px 8px', borderRadius: 20,
+  /* ── dernier rdv ── */
+  rdvRow: {
+    display: 'flex', alignItems: 'center', gap: 10,
+  },
+  rdvPill: {
+    flexShrink: 0, fontSize: 11, fontWeight: 800,
+    padding: '5px 11px', borderRadius: 20,
+    background: 'rgba(74,108,247,0.08)',
+    border: '1.5px solid rgba(74,108,247,0.18)',
+    color: 'var(--primary)', whiteSpace: 'nowrap',
   },
 };

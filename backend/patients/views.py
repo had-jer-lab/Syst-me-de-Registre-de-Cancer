@@ -1,6 +1,6 @@
-"""
-patients/views.py — Vues complètes avec tous les endpoints
-"""
+# ══════════════════════════════════════════
+# patients/views.py
+# ══════════════════════════════════════════
 from rest_framework import generics, permissions, filters, status
 from rest_framework.views import APIView
 from rest_framework.response import Response
@@ -105,22 +105,34 @@ class PatientListCreateView(generics.ListCreateAPIView):
         return PatientListSerializer
 
     def get_queryset(self):
-        qs = _patient_qs(self.request.user).select_related(
-            'commune__wilaya', 'hospital', 'created_by'
-        ).prefetch_related('cancers__cancer_type', 'cancers__treatments')
+        user = self.request.user
+        # Admin voit tout ; médecin/biologiste voit ses patients
+        if user.is_staff or user.role == 'admin':
+            qs = Patient.objects.select_related(
+                'commune__wilaya', 'hospital', 'created_by'
+            ).prefetch_related('cancers__cancer_type').filter(deleted_at__isnull=True)
+        else:
+            qs = Patient.objects.select_related(
+                'commune__wilaya', 'hospital', 'created_by'
+            ).prefetch_related('cancers__cancer_type').filter(
+                created_by=user,
+                deleted_at__isnull=True,
+            )
 
-        # Filtres
+        # Filtres optionnels par query params
         sexe     = self.request.query_params.get('sexe')
         wilaya   = self.request.query_params.get('wilaya_id')
         hospital = self.request.query_params.get('hospital_id')
         stade    = self.request.query_params.get('stade')
-        source   = self.request.query_params.get('data_source')
 
-        if sexe:     qs = qs.filter(sexe=sexe)
-        if wilaya:   qs = qs.filter(commune__wilaya_id=wilaya)
-        if hospital: qs = qs.filter(hospital_id=hospital)
-        if stade:    qs = qs.filter(cancers__stade_clinique=stade)
-        if source:   qs = qs.filter(data_source=source)
+        if sexe:
+            qs = qs.filter(sexe=sexe)
+        if wilaya:
+            qs = qs.filter(commune__wilaya_id=wilaya)
+        if hospital:
+            qs = qs.filter(hospital_id=hospital)
+        if stade:
+            qs = qs.filter(cancers__stade_clinique=stade)
 
         return qs.order_by('-created_at')
 
@@ -141,8 +153,20 @@ class PatientDetailView(generics.RetrieveUpdateDestroyAPIView):
 
     def get_queryset(self):
         user = self.request.user
-        base = _patient_qs(user)
-        return base.select_related(
+        if user.is_staff or user.role == 'admin':
+            return Patient.objects.select_related(
+                'commune__wilaya', 'hospital', 'created_by'
+            ).prefetch_related(
+                'cancers__cancer_type',
+                'cancers__treatments',
+                'cancers__biological_exams',
+                'cancers__imaging_exams',
+                'cancers__histology',
+                'cancers__metastases',
+                'cancers__follow_ups',
+                'consultations__user',
+            ).all()
+        return Patient.objects.select_related(
             'commune__wilaya', 'hospital', 'created_by'
         ).prefetch_related(
             'cancers__cancer_type',
@@ -152,9 +176,8 @@ class PatientDetailView(generics.RetrieveUpdateDestroyAPIView):
             'cancers__histology',
             'cancers__metastases',
             'cancers__follow_ups',
-            'cancers__status_history',
             'consultations__user',
-        )
+        ).filter(created_by=user)
 
     def perform_destroy(self, instance):
         from django.utils import timezone
@@ -162,12 +185,19 @@ class PatientDetailView(generics.RetrieveUpdateDestroyAPIView):
         instance.save()
 
 
-# ─── Dashboard stats ──────────────────────────────────────────────────────────
+# ─── Stats rapides pour le dashboard ─────────────────────────────────────────
 
 class DashboardStatsView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
     def get(self, request):
+        user = request.user
+
+        if user.is_staff or user.role == 'admin':
+            patients_qs = Patient.objects.filter(deleted_at__isnull=True)
+        else:
+            patients_qs = Patient.objects.filter(created_by=user, deleted_at__isnull=True)
+
         from django.db.models import Count
         from datetime import date, timedelta
 
@@ -189,6 +219,12 @@ class DashboardStatsView(APIView):
             .annotate(count=Count('id'))
             .order_by('cancers__stade_clinique')
         )
+
+        # Répartition par sexe
+        sexe_m = patients_qs.filter(sexe='M').count()
+        sexe_f = patients_qs.filter(sexe='F').count()
+
+        # Top organes
         top_organes = (
             patients_qs
             .filter(cancers__cancer_type__isnull=False)
@@ -214,15 +250,13 @@ class DashboardStatsView(APIView):
         ).distinct().count()
 
         return Response({
-            'total_patients':    total,
-            'this_month':        this_month,
-            'last_month':        last_month,
-            'evolution_pct':     round(((this_month - last_month) / last_month * 100) if last_month else 0, 1),
-            'sexe':              {'M': patients_qs.filter(sexe='M').count(), 'F': patients_qs.filter(sexe='F').count()},
-            'stades':            list(stades),
-            'top_organes':       list(top_organes),
-            'traitements_stats': list(traitements_stats),
-            'triple_negatif':    triple_neg,
+            'total_patients':  total,
+            'this_month':      this_month,
+            'last_month':      last_month,
+            'evolution_pct':   round(((this_month - last_month) / last_month * 100) if last_month else 0, 1),
+            'sexe':            {'M': sexe_m, 'F': sexe_f},
+            'stades':          list(stades),
+            'top_organes':     list(top_organes),
         })
 
 
@@ -317,71 +351,3 @@ class ConsultationListCreateView(generics.ListCreateAPIView):
             patient_id=self.kwargs.get('patient_pk'),
             user=self.request.user,
         )
-
-
-
-# ─── À ajouter dans patients/views.py ────────────────────────────────────────
-
-from .models      import DemandeExamen          # ajouter à l'import
-from .serializers import DemandeExamenSerializer # ajouter à l'import
-
-
-class DemandeExamenListCreateView(generics.ListCreateAPIView):
-    """
-    GET  /api/patients/<patient_pk>/demandes/
-    POST /api/patients/<patient_pk>/demandes/
-    """
-    serializer_class   = DemandeExamenSerializer
-    permission_classes = [permissions.IsAuthenticated]
-
-    def get_queryset(self):
-        patient_id = self.kwargs['patient_pk']
-        user = self.request.user
-        qs = DemandeExamen.objects.filter(patient_id=patient_id).select_related(
-            'medecin', 'patient', 'cancer__cancer_type'
-        )
-        if not (user.is_staff or getattr(user, 'role', '') == 'admin'):
-            qs = qs.filter(patient__created_by=user)
-        return qs
-
-    def perform_create(self, serializer):
-        serializer.save(
-            patient_id=self.kwargs['patient_pk'],
-            medecin=self.request.user,
-        )
-
-
-class DemandeExamenDetailView(generics.RetrieveUpdateDestroyAPIView):
-    """
-    GET / PATCH / DELETE  /api/patients/<patient_pk>/demandes/<pk>/
-    Permet aussi au biologiste/radiologue de renseigner le résultat (PATCH statut + resultat_texte)
-    """
-    serializer_class   = DemandeExamenSerializer
-    permission_classes = [permissions.IsAuthenticated]
-
-    def get_queryset(self):
-        return DemandeExamen.objects.filter(patient_id=self.kwargs['patient_pk'])
-
-
-class AllDemandesView(generics.ListAPIView):
-    """
-    GET /api/patients/demandes/   → toutes les demandes du médecin connecté
-    Utile pour un tableau de bord dédié aux biologistes / radiologues
-    """
-    serializer_class   = DemandeExamenSerializer
-    permission_classes = [permissions.IsAuthenticated]
-    filter_backends    = [filters.OrderingFilter]
-    ordering_fields    = ['date_demande', 'statut', 'urgence']
-
-    def get_queryset(self):
-        user = self.request.user
-        qs = DemandeExamen.objects.select_related(
-            'medecin', 'patient', 'cancer__cancer_type'
-        )
-        if user.is_staff or getattr(user, 'role', '') == 'admin':
-            return qs
-        # Médecin : ses propres demandes
-        # Biologiste : demandes de type biologie
-        if getattr(user, 'role', '') == 'biologiste':
-            return qs.filter(type_demande='biologie')
-        return qs.filter(medecin=user)

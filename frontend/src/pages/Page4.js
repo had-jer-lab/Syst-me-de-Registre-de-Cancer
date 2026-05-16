@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { usePatient } from '../context/PatientContext';
 import Layout from '../components/Layout';
 import { SC, Field, Select, TagGroup, PageHeader, BtnRow } from '../components/FormFields';
+import { MicButton } from '../components/MicButton';
 
 function calcIMC(poids, taille) {
   const p = parseFloat(poids);
@@ -10,10 +11,10 @@ function calcIMC(poids, taille) {
   if (!p || !t || t <= 0) return { val: null, cat: '', color: 'var(--primary)' };
   const imc = p / (t * t);
   let cat = '', color = 'var(--primary)';
-  if (imc < 18.5)     { cat = 'Insuffisance pondérale'; color = '#3498db'; }
-  else if (imc < 25)  { cat = 'Corpulence normale'; color = 'var(--accent)'; }
-  else if (imc < 30)  { cat = 'Surpoids'; color = 'var(--accent3)'; }
-  else                { cat = 'Obésité'; color = 'var(--accent2)'; }
+  if (imc < 18.5)    { cat = 'Insuffisance pondérale'; color = '#3498db'; }
+  else if (imc < 25) { cat = 'Corpulence normale';     color = 'var(--accent)'; }
+  else if (imc < 30) { cat = 'Surpoids';               color = 'var(--accent3)'; }
+  else               { cat = 'Obésité';                color = 'var(--accent2)'; }
   return { val: imc.toFixed(1), cat, color };
 }
 
@@ -22,6 +23,12 @@ function imcMarkerPct(imc) {
   return Math.min(100, Math.max(0, ((parseFloat(imc) - 16) / (40 - 16)) * 100));
 }
 
+const ALC_OPTIONS = [
+  { val: 'Jamais', emoji: '🚱' },
+  { val: 'Rare', emoji: '🥂' },
+  { val: 'Modéré', emoji: '🍷' },
+  { val: 'Régulier', emoji: '🍺' },
+];
 
 export default function Page4() {
   const navigate = useNavigate();
@@ -35,7 +42,7 @@ export default function Page4() {
 
   const imc = calcIMC(data.poids, data.taille_patient);
 
-  const addAntecedent = () => update({ antecedents: [...(data.antecedents || ['']), ''] });
+  const addAntecedent    = () => update({ antecedents: [...(data.antecedents || ['']), ''] });
   const removeAntecedent = (i) => update({ antecedents: (data.antecedents || []).filter((_, idx) => idx !== i) });
   const updateAntecedent = (i, val) => {
     const arr = [...(data.antecedents || [])];
@@ -63,7 +70,29 @@ export default function Page4() {
               value={data.tabac}
               onChange={v => update({ tabac: v })}
             />
-            
+            <div className="field-row c2" style={{ marginTop: 12 }}>
+              <Field label="Paquets-années">
+                <div className="fi-wrap">
+                  <input className="fi" type="number" step="0.5" placeholder="ex: 20"
+                    value={data.paquetsAnnees} onChange={set('paquetsAnnees')} />
+                  <span className="fi-unit">PA</span>
+                </div>
+              </Field>
+              <Field label="Durée (années)">
+                <div className="fi-wrap">
+                  <input className="fi" type="number" step="1" placeholder="ex: 15"
+                    value={data.dureTabac} onChange={set('dureTabac')} />
+                  <span className="fi-unit">ans</span>
+                </div>
+              </Field>
+            </div>
+            <Field label="Type de tabagisme" style={{ marginTop: 10 }}>
+              <TagGroup
+                options={['Cigarette', 'Chicha', 'Cigare', 'Tabac à chiquer']}
+                value={data.typeTabac}
+                onChange={v => update({ typeTabac: v })}
+              />
+            </Field>
           </SC>
 
           {/* Alcool */}
@@ -84,7 +113,7 @@ export default function Page4() {
               value={data.sport}
               onChange={v => update({ sport: v })}
             />
-            <Field label="Fréquence hebdomadaire" style={{ marginTop: 10 }}>
+            <Field label="Fréquence hebdomadaire" style={{ marginTop:10 }}>
               <Select
                 options={['1 × / semaine','2–3 × / semaine','4–5 × / semaine','Quotidien']}
                 placeholder="—"
@@ -101,9 +130,14 @@ export default function Page4() {
               value={data.alim}
               onChange={v => update({ alim: v })}
             />
-            <Field label="Remarques alimentaires" style={{ marginTop: 10 }}>
-              <textarea className="fi" placeholder="ex: diabétique, régime hyposodé…"
-                rows="2" value={data.alimentRem} onChange={set('alimentRem')} />
+            <Field label="Remarques alimentaires" style={{ marginTop:10 }}>
+              {/* Textarea avec mic à droite */}
+              <div style={{ display:'flex', gap:6, alignItems:'flex-start' }}>
+                <textarea className="fi" placeholder="ex: diabétique, régime hyposodé…"
+                  rows="2" value={data.alimentRem} onChange={set('alimentRem')}
+                  style={{ flex:1 }} />
+                <MicButton onResult={(t) => update({ alimentRem: t })} />
+              </div>
             </Field>
           </SC>
         </div>
@@ -132,9 +166,9 @@ export default function Page4() {
               </Field>
             </div>
 
-            <div className="imc-display" style={{ marginTop: 12 }}>
+            <div className="imc-display" style={{ marginTop:12 }}>
               <span className="imc-val" style={{ color: imc.color }}>{imc.val || '—'}</span>
-              <span style={{ fontSize: 12, fontWeight: 700, color: imc.color }}>{imc.cat}</span>
+              <span style={{ fontSize:12, fontWeight:700, color: imc.color }}>{imc.cat}</span>
             </div>
             <div className="imc-bar">
               <div className="imc-marker" style={{ left: `${imcMarkerPct(imc.val)}%` }} />
@@ -144,25 +178,26 @@ export default function Page4() {
             </div>
           </SC>
 
-          {/* Antécédents familiaux */}
+          {/* Antécédents familiaux — avec MicButton sur chaque ligne */}
           <SC label="Antécédents familiaux de cancer">
             <TagGroup
               options={['✓ Oui', '✗ Non', '? Inconnu']}
               value={data.antFam}
               onChange={v => update({ antFam: v })}
             />
-            <div style={{ marginTop: 12 }}>
+            <div style={{ marginTop:12 }}>
               {(data.antecedents || ['']).map((ant, i) => (
                 <div key={i} className="list-item" style={{ marginBottom: 8 }}>
-                  <span style={{ fontSize: 18 }}></span>
+                  <span style={{ fontSize: 18 }}>👨‍👩‍👧</span>
                   <input
                     className="fi"
-                    style={{ flex: 1, border: 'none', background: 'transparent' }}
+                    style={{ flex:1, border:'none', background:'transparent' }}
                     type="text"
                     placeholder="ex: Mère – cancer du sein, 52 ans…"
                     value={ant}
                     onChange={e => updateAntecedent(i, e.target.value)}
                   />
+                  <MicButton onResult={(t) => updateAntecedent(i, t)} />
                   {i > 0 && (
                     <button className="del-btn" onClick={() => removeAntecedent(i)}>✕</button>
                   )}
@@ -175,22 +210,35 @@ export default function Page4() {
           {/* Traitements antérieurs */}
           
 
-          {/* Allergies */}
+          {/* Allergies — avec MicButton */}
           <SC label="Allergies médicamenteuses">
             <Field label="Médicaments déclencheurs">
-              <input className="fi" type="text" placeholder="ex: Pénicilline, AINS, Iode…"
-                value={data.allergies} onChange={set('allergies')} />
+              <div style={{ display:'flex', gap:6, alignItems:'center' }}>
+                <input className="fi" type="text" placeholder="ex: Pénicilline, AINS, Iode…"
+                  value={data.allergies} onChange={set('allergies')} style={{ flex:1 }} />
+                <MicButton onResult={(t) => update({ allergies: t })} />
+              </div>
             </Field>
-            <Field label="Autres allergies notables" style={{ marginTop: 10 }}>
-              <input className="fi" type="text" placeholder="ex: Latex, arachides…"
-                value={data.autresAllergies} onChange={set('autresAllergies')} />
+            <Field label="Autres allergies notables" style={{ marginTop:10 }}>
+              <div style={{ display:'flex', gap:6, alignItems:'center' }}>
+                <input className="fi" type="text" placeholder="ex: Latex, arachides…"
+                  value={data.autresAllergies} onChange={set('autresAllergies')} style={{ flex:1 }} />
+                <MicButton onResult={(t) => update({ autresAllergies: t })} />
+              </div>
             </Field>
           </SC>
 
-          {/* Observations */}
+          {/* Observations — avec MicButton sur textarea */}
           <SC label="Observations complémentaires">
-            <textarea className="fi" rows="3" placeholder="Remarques libres du médecin…"
-              value={data.observations} onChange={set('observations')} />
+            <div style={{ display:'flex', gap:6, alignItems:'flex-start' }}>
+              <textarea className="fi" rows="3" placeholder="Remarques libres du médecin…"
+                value={data.observations} onChange={set('observations')}
+                style={{ flex:1 }} />
+              <MicButton onResult={(t) => update({ observations: (data.observations ? data.observations + ' ' : '') + t })} />
+            </div>
+            <div style={{ fontSize:11, color:'#a0aec0', marginTop:4 }}>
+              💡 Cliquez sur le micro pour dicter vos observations
+            </div>
           </SC>
         </div>
       </div>
