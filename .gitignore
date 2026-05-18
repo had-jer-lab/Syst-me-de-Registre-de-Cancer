@@ -1,3 +1,5 @@
 backend/.env
 backend/media/
 backend/**/__pycache__/
+**/__pycache__/
+**/*.pyc
