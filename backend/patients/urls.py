@@ -3,18 +3,15 @@
 # ══════════════════════════════════════════
 from django.urls import path
 from .views import (
-    VoiceParseView,
-    IDCardScanView,   # ✅ مهم
     WilayaListView, CommuneListView, HospitalListView,
     CancerTypeListView,
     PatientListCreateView, PatientDetailView,
+    PublicPatientView,
     DashboardStatsView,
     CancerListCreateView, CancerDetailView,
     TreatmentListCreateView, TreatmentDetailView,
     ConsultationListCreateView,
 )
-
-from .views import WhisperParseView
 
 urlpatterns = [
     # ── Référentiels ──────────────────────────────────────────────────────────
@@ -29,6 +26,7 @@ urlpatterns = [
     # ── Patients ──────────────────────────────────────────────────────────────
     path('',               PatientListCreateView.as_view(), name='patients'),
     path('<int:pk>/',      PatientDetailView.as_view(),     name='patient-detail'),
+    path('public/<int:pk>/', PublicPatientView.as_view(),    name='patient-public'),
 
     # ── Cancers (nested sous patient) ─────────────────────────────────────────
     path('<int:patient_pk>/cancers/',

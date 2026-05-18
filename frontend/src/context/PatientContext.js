@@ -34,6 +34,7 @@ const INITIAL = {
   grade_histologique:  '',   // Cancer.grade_histologique (était data.grade)
   bloc_anapath:        '',   // Cancer.bloc_anapath
   stade_clinique:      '',   // Cancer.stade_clinique  (était data.stade)
+  stade_pathologique:  '',   // Cancer.stade_pathologique
   tnmT:                'T0', // → Cancer.tnm (concaténé)
   tnmN:                'N0',
   tnmM:                'M0',

@@ -28,7 +28,9 @@ const STATUS_COLORS = {
 };
 const ROLE_COLORS = {
   medecin:    { bg: 'rgba(74,108,247,0.1)',  color: '#4A6CF7' },
-  biologiste: { bg: 'rgba(0,201,167,0.12)',  color: '#00C9A7' },
+  epidimio:   { bg: 'rgba(255,205,86,0.12)', color: '#F4D03F' },
+  anapate:    { bg: 'rgba(155,89,182,0.12)', color: '#9B59B6' },
+  pharmacie:  { bg: 'rgba(52,152,219,0.12)', color: '#3498DB' },
 };
 const ALL_PERMISSIONS = [
   { key: 'perm_read',   label: 'Lecture',      icon: '👁',  desc: 'Consulter les dossiers patients' },
@@ -176,7 +178,9 @@ function UserModal({ user, onClose, onSave }) {
                 <label style={s.ml}>Rôle</label>
                 <select style={s.mi} value={form.role} onChange={e => setForm({ ...form, role: e.target.value })}>
                   <option value="medecin">Médecin</option>
-                  <option value="biologiste">Biologiste</option>
+                  <option value="epidimio">Épidimio</option>
+                  <option value="anapate">Anapath</option>
+                  <option value="pharmacie">Pharmacie</option>
                 </select>
               </div>
               <div style={s.mfg}>
@@ -364,7 +368,12 @@ function UsersPage({ search }) {
                   </td>
                   <td style={s.td}>
                     <span style={{ ...s.roleChip, ...ROLE_COLORS[u.role] }}>
-                      {u.role === 'medecin' ? 'Médecin' : 'Biologiste'}
+                      {{
+                        medecin:   'Médecin',
+                        epidimio:  'Épidimio',
+                        anapate:   'Anapath',
+                        pharmacie: 'Pharmacie',
+                      }[u.role] || u.role}
                     </span>
                   </td>
                   <td style={s.td}><span style={{ fontSize: 13, color: '#4A5568' }}>{u.specialite || '—'}</span></td>
@@ -508,7 +517,7 @@ function OverviewPage({ usersCount, logsCount, setPage }) {
     <>
       <div style={s.statsGrid}>
         {[
-          { label: 'Mes utilisateurs', value: String(usersCount), delta: 'médecins & biologistes', icon: '👥', color: '#4A6CF7' },
+          { label: 'Mes utilisateurs', value: String(usersCount), delta: 'médecins, épidimio, anapath, pharmacie', icon: '👥', color: '#4A6CF7' },
           { label: 'Activités enregistrées', value: String(logsCount), delta: 'dans le journal', icon: '📋', color: '#00C9A7' },
           { label: 'Statut système', value: 'En ligne', delta: 'Backend connecté', icon: '✅', color: '#9B59B6' },
         ].map(({ label, value, delta, icon, color }) => (
@@ -528,7 +537,7 @@ function OverviewPage({ usersCount, logsCount, setPage }) {
       </div>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2,1fr)', gap: 16, marginBottom: 32 }}>
         {[
-          { id: 'users', icon: '👤', label: 'Gérer mes utilisateurs', sub: 'Créer des comptes médecins & biologistes', color: 'linear-gradient(135deg,#4A6CF7,#6B87FF)' },
+          { id: 'users', icon: '👤', label: 'Gérer mes utilisateurs', sub: 'Créer des comptes médecins, épidimio, anapath & pharmacie', color: 'linear-gradient(135deg,#4A6CF7,#6B87FF)' },
           { id: 'logs',  icon: '📋', label: 'Journal d\'activité',     sub: 'Connexions & actions des utilisateurs',  color: 'linear-gradient(135deg,#9B59B6,#8e44ad)' },
         ].map(({ id, icon, label, sub, color }) => (
           <div key={id} style={s.quickCard} onClick={() => setPage(id)}>
@@ -546,7 +555,7 @@ function OverviewPage({ usersCount, logsCount, setPage }) {
           Comment ça marche ?
         </div>
         <div style={{ fontSize: 13, color: '#7A8BAD', lineHeight: 1.6 }}>
-          1. Créez un compte pour chaque médecin ou biologiste via <strong>« Gérer mes utilisateurs »</strong><br />
+          1. Créez un compte pour chaque médecin, épidimio, anapath ou pharmacie via <strong>« Gérer mes utilisateurs »</strong><br />
           2. Définissez un <strong>email</strong> et un <strong>mot de passe</strong> sécurisé<br />
           3. Assignez les <strong>permissions</strong> adaptées à leur rôle<br />
           4. L'utilisateur peut maintenant se connecter avec ses identifiants

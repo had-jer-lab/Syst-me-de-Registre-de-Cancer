@@ -291,7 +291,7 @@ export default function Dashboard() {
             <table style={s.table}>
               <thead>
                 <tr style={s.thead}>
-                  {['N° Dossier', 'Patient', 'Âge', 'Sexe', 'Organe', 'Stade', 'Wilaya', 'Diagnostic', 'Actions'].map(h => (
+                  {['N° Dossier', 'Patient', 'Âge', 'Sexe', 'Organe', 'Stade', 'Wilaya', 'Actions'].map(h => (
                     <th key={h} style={s.th}>{h}</th>
                   ))}
                 </tr>
@@ -345,11 +345,6 @@ export default function Dashboard() {
                         <span style={{ fontSize: 13, color: '#4A5568' }}>{p.wilaya_name || '—'}</span>
                       </td>
                       <td style={s.td}>
-                        <span style={{ fontSize: 12, color: '#7A8BAD', fontWeight: 600 }}>
-                          {cancer?.date_diagnostic !== '—' ? cancer?.date_diagnostic : '—'}
-                        </span>
-                      </td>
-                      <td style={s.td}>
                         <div style={s.actionBtns}>
                           <button style={s.iconBtnView}
                             title="Voir le dossier"
@@ -374,7 +369,7 @@ export default function Dashboard() {
                 })}
                 {patients.length === 0 && !loading && (
                   <tr>
-                    <td colSpan={9} style={{ ...s.td, textAlign: 'center', padding: 60 }}>
+                    <td colSpan={8} style={{ ...s.td, textAlign: 'center', padding: 60 }}>
                       <div style={{ fontSize: 40, marginBottom: 12 }}>👥</div>
                       <div style={{ fontWeight: 700, color: '#1A2B4A', marginBottom: 6 }}>
                         {search ? `Aucun résultat pour « ${search} »` : 'Aucun patient enregistré'}

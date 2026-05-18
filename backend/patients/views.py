@@ -4,6 +4,7 @@
 from rest_framework import generics, permissions, filters, status
 from rest_framework.views import APIView
 from rest_framework.response import Response
+from base64 import b64decode
 from django_filters.rest_framework import DjangoFilterBackend
 from .models import (
     Wilaya, Commune, Hospital,
@@ -258,6 +259,48 @@ class DashboardStatsView(APIView):
             'stades':          list(stades),
             'top_organes':     list(top_organes),
         })
+
+
+# ─── Public patient view (no auth, token based) ─────────────────────────────
+class PublicPatientView(APIView):
+    """Return patient data for a public link. No authentication required.
+
+    Query param `token` must be base64(numero_dossier) or base64(id).
+    """
+    permission_classes = [permissions.AllowAny]
+
+    def get(self, request, pk):
+        token = request.query_params.get('token')
+        if not token:
+            return Response({'detail': 'Lien invalide.'}, status=status.HTTP_404_NOT_FOUND)
+
+        try:
+            patient = Patient.objects.select_related(
+                'commune__wilaya', 'hospital', 'created_by'
+            ).prefetch_related(
+                'cancers__cancer_type',
+                'cancers__treatments',
+                'cancers__biological_exams',
+                'cancers__imaging_exams',
+                'cancers__histology',
+                'cancers__metastases',
+                'cancers__follow_ups',
+                'consultations__user',
+            ).get(pk=pk, deleted_at__isnull=True)
+        except Patient.DoesNotExist:
+            return Response({'detail': 'Dossier introuvable.'}, status=status.HTTP_404_NOT_FOUND)
+
+        # validate token
+        try:
+            decoded = b64decode(token).decode('utf-8')
+        except Exception:
+            return Response({'detail': 'Lien invalide.'}, status=status.HTTP_404_NOT_FOUND)
+
+        if decoded != patient.numero_dossier and decoded != str(patient.id):
+            return Response({'detail': 'Lien invalide ou expiré.'}, status=status.HTTP_404_NOT_FOUND)
+
+        serializer = PatientDetailSerializer(patient, context={'request': request})
+        return Response(serializer.data)
 
 
 # ─── Cancers ─────────────────────────────────────────────────────────────────
