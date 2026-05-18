@@ -2,25 +2,24 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { usePatient } from '../context/PatientContext';
 import Layout from '../components/Layout';
-import { SC, BtnRow, InfoItem } from '../components/FormFields';
-
-const API = 'http://localhost:8000/api';
-
-async function post(path, body, token) {
-  const res = await fetch(`${API}${path}`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-    body: JSON.stringify(body),
-  });
-  if (!res.ok) throw await res.json().catch(() => ({}));
-  if (res.status === 204) return null;
-  return res.json();
-}
+import { SC, PageHeader, BtnRow, InfoItem } from '../components/FormFields';
 
 function fmtDate(str) {
   if (!str) return '—';
-  const [y, m, d] = str.split('-');
-  return `${d}/${m}/${y}`;
+  try {
+    // Handle ISO timestamps like 2026-02-28T13:17:37.521981+01:00
+    const d = new Date(str);
+    if (!isNaN(d)) {
+      const dd = String(d.getDate()).padStart(2,'0');
+      const mm = String(d.getMonth()+1).padStart(2,'0');
+      const yyyy = d.getFullYear();
+      return dd + '/' + mm + '/' + yyyy;
+    }
+    // Fallback: plain YYYY-MM-DD
+    const parts = str.split('T')[0].split('-');
+    if (parts.length === 3) return parts[2] + '/' + parts[1] + '/' + parts[0];
+  } catch(_) {}
+  return str;
 }
 
 const TYPE_TUMEUR_MAP = {
@@ -35,32 +34,11 @@ function normalizeTypeTumeur(value) {
 }
 
 function score(arr, total) {
-  return Math.round((arr.filter(v => v && String(v).trim()).length / total) * 100);
+  const filled = arr.filter(v => v && v.toString().trim()).length;
+  return Math.round((filled / total) * 100);
 }
 
-// Marqueurs → BiologicalExam
-const MARQUEURS_MAP = [
-  { key:'cea',   label:'CEA',     unite:'ng/mL' },
-  { key:'ca199', label:'CA 19-9', unite:'U/mL'  },
-  { key:'ca125', label:'CA 125',  unite:'U/mL'  },
-  { key:'afp',   label:'AFP',     unite:'ng/mL' },
-  { key:'psa',   label:'PSA',     unite:'ng/mL' },
-  { key:'ca153', label:'CA 15-3', unite:'U/mL'  },
-];
-
-const BILAN_MAP = [
-  { key:'nfs',   label:'NFS',         unite:'',     numeric:false },
-  { key:'creat', label:'Créatinine',  unite:'mg/L', numeric:true  },
-  { key:'ggt',   label:'GGT',         unite:'U/L',  numeric:true  },
-  { key:'ldh',   label:'LDH',         unite:'U/L',  numeric:true  },
-  { key:'hb',    label:'Hémoglobine', unite:'g/dL', numeric:true  },
-  { key:'tp',    label:'TP',          unite:'%',    numeric:true  },
-];
-
-// ─── Composants visuels ───────────────────────────────────────────────────────
-
-function Bar({ label, pct }) {
-  const color = pct >= 80 ? '#27ae60' : pct >= 50 ? '#f39c12' : '#e74c3c';
+function CompletionBar({ label, pct }) {
   return (
     <div style={{ display:'flex', alignItems:'center', gap:12, marginBottom:10 }}>
       <div style={{ width:180, fontSize:12, fontWeight:700, color:'#64748B' }}>{label}</div>
@@ -125,15 +103,14 @@ const SAVE_STEPS = [
 // ─── Main ─────────────────────────────────────────────────────────────────────
 
 export default function Page5() {
-  const navigate  = useNavigate();
-  const { data, reset } = usePatient();
-  const [saving, setSaving]     = useState(false);
-  const [saveStep, setSaveStep] = useState(-1);
-  const [error, setError]       = useState('');
-  const [success, setSuccess]   = useState(false);
-  const [dossier, setDossier]   = useState('');
-  const [checks, setChecks]     = useState({ c1:false, c2:false, c3:false });
-  const [unchecked, setUnc]     = useState([]);
+  const navigate = useNavigate();
+  const { data, update } = usePatient();
+  const [checks, setChecks]       = useState({ c1: false, c2: false, c3: false });
+  const [unchecked, setUnchecked] = useState([]);
+  const [showSuccess, setShowSuccess] = useState(false);
+  const [saving, setSaving]       = useState(false);
+  const [saveError, setSaveError] = useState('');
+  const [createdDossier, setCreatedDossier] = useState('');
 
   // ── Scores de complétude ─────────────────────────────────────────────────
   const s1 = score([data.first_name, data.last_name, data.date_naissance, data.sexe, data.phone, data.national_id], 6);
@@ -142,68 +119,65 @@ export default function Page5() {
   const s4 = score([data.tabac, data.alcool, data.sport, data.antFam], 4);
   const global = Math.round((s1+s2+s3+s4)/4);
 
-  const fullName = `${data.first_name||'—'} ${data.last_name||'—'}`;
+  const fullName = `${data.prenom || '—'} ${data.nom || '—'}`;
 
-  // ── Labels affichés ──────────────────────────────────────────────────────
-  const sexeLabel = data.sexe === 'M' ? '♂ Masculin' : data.sexe === 'F' ? '♀ Féminin' : '—';
+  const toggleCheck = (key) => setChecks(prev => ({ ...prev, [key]: !prev[key] }));
 
-  const famLabels = {celibataire:'Célibataire',marie:'Marié(e)',divorce:'Divorcé(e)',veuf:'Veuf / Veuve'};
-  const covLabels = {cnas:'CNAS',casnos:'CASNOS',pmsr:'PMSR',aucune:'Aucune',autre:'Autre'};
-
-  // ── SAVE ─────────────────────────────────────────────────────────────────
+  // ── SAVE — envoie vraiment les données au backend ─────────────────────────
   const handleSave = async () => {
-    const missing = Object.entries(checks).filter(([,v])=>!v).map(([k])=>k);
-    if (missing.length) { setUnc(missing); setTimeout(()=>setUnc([]),2000); return; }
+    // 1. Vérifier les checkboxes
+    const missing = Object.entries(checks).filter(([, v]) => !v).map(([k]) => k);
+    if (missing.length > 0) {
+      setUnchecked(missing);
+      setTimeout(() => setUnchecked([]), 2000);
+      return;
+    }
 
-    setSaving(true); setError(''); setSaveStep(0);
-    const token = localStorage.getItem('access_token');
-    if (!token) { setError('Session expirée.'); setSaving(false); return; }
+    setSaving(true);
+    setSaveError('');
 
     try {
-      // ── 1. Validation frontend ──────────────────────────────────────────
-      const frontErrs = [];
-      if (!data.last_name?.trim())   frontErrs.push('Nom manquant');
-      if (!data.first_name?.trim())  frontErrs.push('Prénom manquant');
-      if (!data.date_naissance)      frontErrs.push('Date de naissance manquante');
-      if (!data.sexe)                frontErrs.push('Sexe manquant');
-      if (frontErrs.length) {
-        setError('Données incomplètes : '+frontErrs.join(', ')+'. Vérifiez la page 1.');
-        setSaving(false); return;
+      const token = localStorage.getItem('access_token');
+      if (!token) {
+        setSaveError('Session expirée. Veuillez vous reconnecter.');
+        setSaving(false);
+        return;
       }
 
-      // ── 2. Patient ──────────────────────────────────────────────────────
+      // ── 2. Créer le patient ──────────────────────────────────────
       const patientPayload = {
-        first_name:          data.first_name,
-        last_name:           data.last_name,
-        date_naissance:      data.date_naissance,
-        sexe:                data.sexe,                    // 'M' ou 'F'
-        situation_familiale: data.situation_familiale || '',
-        couverture_sociale:  data.couverture_sociale  || '',
-        profession:          data.profession          || '',
-        phone:               data.phone               || '',
-        email:               data.email               || '',
-        adresse:             data.adresse             || '',
-        national_id:         data.national_id         || null,
-        data_source:         'manual',
-        ...(data.commune_id  ? { commune:  parseInt(data.commune_id)  } : {}),
-        ...(data.hospital_id ? { hospital: parseInt(data.hospital_id) } : {}),
-        ...(data.commune && !data.commune_id ? { commune_text: data.commune } : {}),
-        ...(data.wilaya ? { wilaya_text: data.wilaya } : {}),
+        first_name:     data.prenom        || '',
+        last_name:      data.nom           || '',
+        date_naissance: data.dob           || '',
+        sexe:           data.sexe?.includes('Masculin') ? 'M' : 'F',
+        phone:          data.tel           || '',
+        national_id:    data.nin           || null,
+        data_source:    'manual',
       };
 
-      const patient = await post('/patients/', patientPayload, token);
-      const patientId = patient.id;
-      setDossier(patient.numero_dossier || '');
-      setSaveStep(1);
+      const patRes = await fetch('http://localhost:8000/api/patients/', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(patientPayload),
+      });
 
-      // ── 3. Cancer ───────────────────────────────────────────────────────
-      let cancerId = null;
-      const hasCancer = data.organe || data.type_histologique || data.stade_clinique || data.date_diagnostic;
+      if (!patRes.ok) {
+        const err = await patRes.json();
+        console.error('Erreur patient:', err);
+        const msg = err.date_naissance?.[0] || err.national_id?.[0] || err.detail || JSON.stringify(err);
+        setSaveError('Erreur : ' + msg);
+        setSaving(false);
+        return;
+      }
 
-      if (hasCancer) {
-        const cimCode = data.cim10_code === '__manual__'
-          ? (data.cim10_manual || '') : (data.cim10_code || '');
+      const patient = await patRes.json();
+      setCreatedDossier(patient.numero_dossier || '');
 
+      // ── 3. Créer le cancer si organe renseigné ────────────────────
+      if (data.organe) {
         const cancerPayload = {
           patient:             patientId,
           ...(data.cancer_type_id ? { cancer_type: parseInt(data.cancer_type_id) } : {}),
@@ -235,109 +209,18 @@ export default function Page5() {
           data_source:         'manual',
         };
 
-        const cancer = await post(`/patients/${patientId}/cancers/`, cancerPayload, token);
-        cancerId = cancer?.id;
-        setSaveStep(2);
-
-        // ── 4. Traitements ─────────────────────────────────────────────
-        if (cancerId && data.traitements?.length) {
-          for (const t of data.traitements) {
-            await post(`/patients/${patientId}/cancers/${cancerId}/treatments/`, {
-              cancer:               cancerId,
-              type_traitement:      t.type_traitement,
-              intention:            t.intention            || '',
-              statut:               t.statut               || 'planifie',
-              ligne:                t.ligne                || '',
-              protocole:            t.protocole            || '',
-              medicaments:          t.medicaments          || '',
-              voie_administration:  t.voie_administration  || '',
-              jours_administration: t.jours_administration || [],
-              cycles_prevus:        t.cycles_prevus   ? parseInt(t.cycles_prevus)   : null,
-              cycles_realises:      t.cycles_realises ? parseInt(t.cycles_realises) : null,
-              date_debut:           t.date_debut      || null,
-              date_fin:             t.date_fin        || null,
-              reponse_tumorale:     t.reponse_tumorale || '',
-              date_evaluation:      t.date_evaluation  || null,
-              grade_toxicite:       t.grade_toxicite   || '',
-              description_toxicite: t.description_toxicite || '',
-            }, token);
-          }
-        }
-        setSaveStep(3);
-
-        // ── 5. Examens biologiques ─────────────────────────────────────
-        for (const { key, label, unite } of MARQUEURS_MAP) {
-          if (data[key]) {
-            await post(`/patients/${patientId}/cancers/${cancerId}/biological-exams/`, {
-              cancer: cancerId, type_analyse: label,
-              valeur: parseFloat(data[key]), unite,
-              date_analyse: data.date_diagnostic || null,
-            }, token).catch(()=>{});
-          }
-        }
-
-        for (const { key, label, unite, numeric } of BILAN_MAP) {
-          if (data[key]) {
-            await post(`/patients/${patientId}/cancers/${cancerId}/biological-exams/`, {
-              cancer: cancerId, type_analyse: label,
-              valeur: numeric ? parseFloat(data[key]) : null,
-              resultat: !numeric ? data[key] : '',
-              unite, date_analyse: data.date_diagnostic || null,
-            }, token).catch(()=>{});
-          }
-        }
-
-        if (data.biopsy) {
-          await post(`/patients/${patientId}/cancers/${cancerId}/biological-exams/`, {
-            cancer: cancerId, type_analyse: 'Biopsie / Anatomopathologie',
-            resultat: data.biopsy, date_analyse: data.biopsyDate || null,
-          }, token).catch(()=>{});
-        }
-
-        // ── 6. Imagerie ────────────────────────────────────────────────
-        for (const type_examen of (data.imagerie || [])) {
-          await post(`/patients/${patientId}/cancers/${cancerId}/imaging-exams/`, {
-            cancer: cancerId, type_examen,
-            date_examen: data.date_diagnostic || null,
-          }, token).catch(()=>{});
-        }
-
-        // ── 7. Rechutes ────────────────────────────────────────────────
-        for (const r of (data.rechutes||[]).filter(x=>x.debut)) {
-          await post(`/patients/${patientId}/cancers/${cancerId}/status-history/`, {
-            cancer: cancerId, status: 'rechute', status_date: r.debut,
-          }, token).catch(()=>{});
-        }
-      }
-      setSaveStep(4);
-
-      // ── 8. Habitudes de vie ────────────────────────────────────────────
-      const habitMap = [
-        {key:'tabac', name:'Tabagisme'},
-        {key:'alcool',name:'Alcool'},
-        {key:'sport', name:'Activité physique'},
-        {key:'alim',  name:'Alimentation'},
-      ];
-      for (const {key,name} of habitMap) {
-        if (data[key]) {
-          await post(`/patients/${patientId}/habits/`, {
-            patient: patientId, habit_name: name, frequency: data[key],
-          }, token).catch(()=>{});
-        }
+        await fetch(`http://localhost:8000/api/patients/${patient.id}/cancers/`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify(cancerPayload),
+        });
       }
 
-      // ── 9. Comorbidités ────────────────────────────────────────────────
-      if (data.como && data.como !== 'Aucune') {
-        const comos = Array.isArray(data.como) ? data.como : [data.como];
-        for (const c of comos.filter(x=>x&&x!=='Aucune')) {
-          await post(`/patients/${patientId}/risk-factors/`, {
-            patient: patientId, risk_factor_name: c,
-          }, token).catch(()=>{});
-        }
-      }
-
-      setSaveStep(5);
-      setSuccess(true);
+      // ── 4. Succès ─────────────────────────────────────────────────
+      setShowSuccess(true);
 
     } catch (err) {
       // Message d'erreur détaillé selon le champ Django
@@ -359,6 +242,185 @@ export default function Page5() {
     }
   };
 
+  // Handler when modal confirm: proceed with creation (force)
+  // helper to update an existing patient based on fusion data
+  async function mergePatientAndCancer(existingId, fusionData, token, candidateData) {
+    // ── 1. PATCH patient fields ───────────────────────────────────────────────
+    const nameParts = (fusionData.nom || '').trim().split(' ');
+    // Only send fields that don't require FK lookup
+    // commune requires integer PK — skip it to avoid 400 error
+    // (commune stays as-is on existing patient)
+    const payload = {
+      first_name:     nameParts[0] || '',
+      last_name:      nameParts.slice(1).join(' ') || '',
+      date_naissance: fusionData.dateNaissance || '',
+      phone:          fusionData.telephone || '',
+    };
+
+    // commune is a free-text field in the form (not an FK integer)
+    // → never send it in PATCH to avoid 400 "attendait clé primaire" error
+
+    console.log('[PATCH] payload:', JSON.stringify(payload));
+    console.log('[PATCH] to patient id:', existingId);
+    const res = await fetch(`http://localhost:8000/api/patients/${existingId}/`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify(payload),
+    });
+    if (!res.ok) {
+      const err = await res.json();
+      console.error('[PATCH] FAILED:', err);
+      throw new Error(JSON.stringify(err));
+    }
+    console.log('[PATCH] SUCCESS status:', res.status);
+    const updatedPatient = await res.json();
+
+    // ── 2. Merge cancers — fetch existing, add missing ────────────────────────
+    if (fusionData.cancers && fusionData.cancers.length > 0) {
+      try {
+        const cRes = await fetch(`http://localhost:8000/api/patients/${existingId}/cancers/`,
+          { headers: { Authorization: `Bearer ${token}` } });
+        if (cRes.ok) {
+          const existingCancers = await cRes.json();
+          // Existing cancer names (normalized)
+          const existingNames = existingCancers.map(c =>
+            (c.cancer_type_name || '').toLowerCase().trim()
+          );
+          for (const label of fusionData.cancers) {
+            // label may be "Leucémie (Stade II)" — extract name part
+            const namePart = label.replace(/\s*\(.*\)$/, '').toLowerCase().trim();
+            if (existingNames.includes(namePart)) continue; // already exists
+
+            // Find matching CancerType id from candidateData raw cancers
+            const matchRaw = (candidateData?._rawCancers || []).find(c => {
+              const n = (c.cancer_type_name || c.organe || '').toLowerCase().trim();
+              return n === namePart;
+            });
+            if (matchRaw?.cancer_type) {
+              await fetch(`http://localhost:8000/api/patients/${existingId}/cancers/`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+                body: JSON.stringify({
+                  cancer_type:     matchRaw.cancer_type,
+                  stade_clinique:  matchRaw.stade_clinique || '',
+                  tnm:             matchRaw.tnm || '',
+                  grade:           matchRaw.grade || '',
+                  date_diagnostic: matchRaw.date_diagnostic || null,
+                }),
+              });
+            }
+          }
+        }
+      } catch(e) { console.warn('Cancer merge warning:', e); }
+    }
+
+    return updatedPatient;
+  }
+
+  // ── Helper: convert DD/MM/YYYY → YYYY-MM-DD for API ─────────────────────────
+  function toISODate(str) {
+    if (!str) return '';
+    // Already ISO
+    if (/^\d{4}-\d{2}-\d{2}/.test(str)) return str.split('T')[0];
+    // DD/MM/YYYY
+    const m = str.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+    if (m) return `${m[3]}-${m[2].padStart(2,'0')}-${m[1].padStart(2,'0')}`;
+    return str;
+  }
+
+  // action: 'fusionner' | 'garder_separe'
+  const handleModalConfirm = async (fusionData, note, existingId, action = 'fusionner') => {
+    // Save modal data BEFORE closing (duplicateModal will be null after)
+    const savedModal = duplicateModal;
+    setDuplicateModal(null);
+
+    // ── Garder séparément → force create new patient ──────────────────────────
+    if (action === 'garder_separe') {
+      setSaving(true);
+      setSaveError('');
+      try {
+        const token = localStorage.getItem('access_token');
+        if (!token) { setSaveError('Session expirée.'); setSaving(false); return; }
+        const patientPayload = {
+          first_name:     data.prenom     || '',
+          last_name:      data.nom        || '',
+          date_naissance: data.dob        || '',
+          sexe:           data.sexe?.includes('Masculin') ? 'M' : 'F',
+          phone:          data.tel        || '',
+          national_id:    null,
+          data_source:    'manual',
+        };
+        const created = await createPatientAndCancer(patientPayload, token, true);
+        if (created) { setShowSuccess(true); setCreatedDossier(created.numero_dossier || ''); }
+      } catch(e) {
+        setSaveError('Erreur réseau.');
+      } finally { setSaving(false); }
+      return;
+    }
+
+    // ── Fusionner → PATCH existing patient ────────────────────────────────────
+    setSaving(true);
+    setSaveError('');
+    try {
+      const token = localStorage.getItem('access_token');
+      if (!token) { setSaveError('Session expirée.'); setSaving(false); return; }
+
+      console.log('[MERGE] existingId:', existingId);
+      console.log('[MERGE] fusionData.dateNaissance:', fusionData.dateNaissance);
+      console.log('[MERGE] savedModal:', savedModal);
+
+      // Convert display date → ISO for API
+      const fusionDataFixed = {
+        ...fusionData,
+        dateNaissance: toISODate(fusionData.dateNaissance),
+      };
+
+      console.log('[MERGE] fusionDataFixed.dateNaissance:', fusionDataFixed.dateNaissance);
+      console.log('[MERGE] PATCH URL: /api/patients/' + existingId + '/');
+
+      const updated = await mergePatientAndCancer(existingId, fusionDataFixed, token, {
+        _rawCancers: [],
+      });
+      if (updated) {
+        setMerged(true);
+        const nameParts = (fusionDataFixed.nom || '').trim().split(' ');
+        update({
+          prenom:      nameParts[0]                  || data.prenom,
+          nom:         nameParts.slice(1).join(' ')  || data.nom,
+          dob:         fusionDataFixed.dateNaissance || data.dob,
+          tel:         fusionDataFixed.telephone     || data.tel,
+          wilaya:      fusionDataFixed.wilaya        || data.wilaya,
+          commune:     fusionDataFixed.commune       || data.commune,
+          medecin:     fusionDataFixed.medecin       || data.medecin,
+        });
+
+        // ── If candidate was a pre-existing DB patient (has an id different
+        // from existingId), DELETE it so only one record remains ────────────
+        const candidateId = savedModal?.candidate?.id;
+        if (candidateId && candidateId !== existingId) {
+          try {
+            await fetch(`http://localhost:8000/api/patients/${candidateId}/`, {
+              method: 'DELETE',
+              headers: { Authorization: `Bearer ${token}` },
+            });
+            console.log('[MERGE] Deleted duplicate candidate id:', candidateId);
+          } catch(delErr) {
+            console.warn('[MERGE] Could not delete candidate:', delErr);
+          }
+        }
+
+        console.log('[MERGE] Fusion OK — patient', existingId, 'updated:', updated.numero_dossier);
+        setShowSuccess(true);
+        setCreatedDossier(updated.numero_dossier || updated.id || '');
+      }
+    } catch (e) {
+      console.error(e);
+      setSaveError('Erreur réseau. Vérifiez que le serveur Django est lancé.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
   // ─── JSX ─────────────────────────────────────────────────────────────────
   return (
     <Layout currentStep={5} progress={100}>
@@ -368,11 +430,9 @@ export default function Page5() {
         <div className="overlay">
           <div className="success-box">
             <div className="suc-icon">✓</div>
-            <div className="suc-title">Dossier enregistré !</div>
+            <div className="suc-title">Patient enregistré !</div>
             <div className="suc-sub">
               Le dossier de <strong>{fullName}</strong> a été créé avec succès.
-              {data.traitements?.length > 0 && <span> {data.traitements.length} traitement(s).</span>}
-              {data.imagerie?.length > 0    && <span> {data.imagerie.length} imagerie(s).</span>}
             </div>
             {dossier && <div className="suc-num">{dossier}</div>}
             <div style={{ display:'flex', gap:10, justifyContent:'center', flexWrap:'wrap' }}>
@@ -555,6 +615,18 @@ export default function Page5() {
         nextLabel={saving ? `⏳ Étape ${saveStep+1}/${SAVE_STEPS.length}…` : '✓ Enregistrer le dossier'}
         nextClass="btn-success"
       />
+
+      {/* Duplicate modal */}
+      {duplicateModal && (
+        <DuplicateDetectionModal
+          patientExistant={duplicateModal.existing}
+          patientNouveau={duplicateModal.candidate}
+          onClose={() => setDuplicateModal(null)}
+          onConfirm={(fusionData, note, existingId, action) =>
+            handleModalConfirm(fusionData, note, existingId, action)
+          }
+        />
+      )}
     </Layout>
   );
 }
