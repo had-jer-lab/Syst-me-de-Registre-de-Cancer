@@ -146,32 +146,23 @@ export default function Page5() {
 
       // ── 2. Créer le patient ──────────────────────────────────────
       const patientPayload = {
-        first_name:     data.prenom        || '',
-        last_name:      data.nom           || '',
-        date_naissance: data.dob           || '',
-        sexe:           data.sexe?.includes('Masculin') ? 'M' : 'F',
-        phone:          data.tel           || '',
-        national_id:    data.nin           || null,
-        data_source:    'manual',
+        first_name:          data.first_name,
+        last_name:           data.last_name,
+        date_naissance:      data.date_naissance,
+        sexe:                data.sexe,                    // 'M' ou 'F'
+        situation_familiale: data.situation_familiale || '',
+        couverture_sociale:  data.couverture_sociale  || '',
+        profession:          data.profession          || '',
+        phone:               data.phone               || '',
+        email:               data.email               || '',
+        adresse:             data.adresse             || '',
+        national_id:         data.national_id         || null,
+        data_source:         'manual',
+        ...(data.commune_id  ? { commune:  parseInt(data.commune_id)  } : {}),
+        ...(data.hospital_id ? { hospital: parseInt(data.hospital_id) } : {}),
+        ...(data.commune && !data.commune_id ? { commune_text: data.commune } : {}),
+        ...(data.wilaya ? { wilaya_text: data.wilaya } : {}),
       };
-
-      const patRes = await fetch('http://localhost:8000/api/patients/', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify(patientPayload),
-      });
-
-      if (!patRes.ok) {
-        const err = await patRes.json();
-        console.error('Erreur patient:', err);
-        const msg = err.date_naissance?.[0] || err.national_id?.[0] || err.detail || JSON.stringify(err);
-        setSaveError('Erreur : ' + msg);
-        setSaving(false);
-        return;
-      }
 
       const patient = await patRes.json();
       setCreatedDossier(patient.numero_dossier || '');
@@ -194,8 +185,10 @@ export default function Page5() {
           medecin_diag:        data.medecin_diag       || '',
           type_histologique:   data.type_histologique  || '',
           grade_histologique:  data.grade_histologique || '',
+          grade:               data.grade_histologique ? data.grade_histologique.substring(0, 1) : '',
           bloc_anapath:        data.bloc_anapath       || '',
           stade_clinique:      data.stade_clinique     || '',
+          stade_pathologique:  data.stade_pathologique || '',
           tnm:                 [data.tnmT,data.tnmN,data.tnmM].filter(Boolean).join(''),
           taille_tumorale:     data.taille_tumorale    ? parseFloat(data.taille_tumorale) : null,
           ganglions_envahis:   data.ganglions_envahis  ? parseInt(data.ganglions_envahis)  : null,

@@ -75,13 +75,13 @@ def patient_cancers(request, patient_id):
 
 
 # ══════════════════════════════════════════════
-# 🟢 LISTE MÉDECINS
+# 🟢 LISTE MÉDECINS / PROFESSIONNELS
 # ══════════════════════════════════════════════
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def list_medecins(request):
     users = User.objects.filter(
-        role__in=['medecin']
+        role__in=['medecin', 'epidimio', 'anapate', 'pharmacie']
     ).exclude(id=request.user.id)
 
     data = []

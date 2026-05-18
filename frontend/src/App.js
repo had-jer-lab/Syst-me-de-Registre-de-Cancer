@@ -16,6 +16,7 @@ import Page4         from './pages/Page4';
 import Page5         from './pages/Page5';
 import Page6         from './pages/Page6';
 import PatientDossier from './pages/PatientDossier';
+import PatientPublicView from './pages/PatientPublicView';
 
 
 export default function App() {
@@ -38,6 +39,7 @@ export default function App() {
           <Route path="/page4"      element={<Page4 />} />   {/* Habitudes (step 5) */}
           <Route path="/page5"      element={<Page5 />} />   {/* Résumé (step 6) */}
           <Route path="/patient/:id"      element={<PatientDossier />} />
+          <Route path="/patient-public/:id" element={<PatientPublicView />} />
           <Route path="/patient/:id/edit" element={<EditPatient />} />
           <Route path="*"           element={<Navigate to="/auth" replace />} />
         </Routes>

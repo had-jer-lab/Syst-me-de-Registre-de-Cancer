@@ -67,7 +67,7 @@ class UserListCreateView(generics.ListCreateAPIView):
     def get_queryset(self):
         # Only show users created by this admin
         return User.objects.filter(
-            role__in=['medecin', 'biologiste'],
+            role__in=['medecin', 'epidimio', 'anapate', 'pharmacie'],
             created_by=self.request.user
         ).order_by('-created_at')
 

@@ -1,5 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 
+// عيّن عنوان الـ LAN الخاص بك هنا ليُستخدم كقيمة افتراضية عند التشغيل على localhost
+const DEV_LOCAL_IP = '192.168.1.8';
+
 // ─── QR Code generator (pure JS, sans librairie externe) ─────────────────────
 // Utilise l'API QR Server gratuite
 function getQRUrl(text, size = 200) {
@@ -7,12 +10,45 @@ function getQRUrl(text, size = 200) {
 }
 
 function getPublicUrl() {
+  // Fast synchronous fallback: use origin or localhost:port
   if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
-    // ← REMPLACEZ CETTE IP PAR VOTRE ADRESSE IP RÉELLE (trouvée avec ipconfig)
-    const localIP = '192.168.1.7';
-    return `http://${localIP}:${window.location.port}`;
+    // If a DEV_LOCAL_IP is provided, prefer it so phones on the LAN can reach the dev server
+    if (DEV_LOCAL_IP && DEV_LOCAL_IP.length) return `http://${DEV_LOCAL_IP}:${window.location.port}`;
+    return `http://${window.location.hostname}:${window.location.port}`;
   }
   return window.location.origin;
+}
+
+// Best-effort LAN IP detection using WebRTC (may be blocked or return mDNS names)
+function detectLocalIP(timeout = 2000) {
+  return new Promise((resolve) => {
+    try {
+      const RTCPeerConnection = window.RTCPeerConnection || window.webkitRTCPeerConnection || window.mozRTCPeerConnection;
+      if (!RTCPeerConnection) return resolve(null);
+      const pc = new RTCPeerConnection({ iceServers: [] });
+      let done = false;
+      pc.createDataChannel('');
+      pc.createOffer().then(offer => pc.setLocalDescription(offer)).catch(() => {});
+      pc.onicecandidate = (e) => {
+        if (!e || !e.candidate || !e.candidate.candidate) return;
+        const cand = e.candidate.candidate;
+        const ipMatch = cand.match(/([0-9]{1,3}(?:\.[0-9]{1,3}){3})/);
+        if (ipMatch && !done) {
+          done = true;
+          try { pc.close(); } catch (e) {}
+          resolve(ipMatch[1]);
+        }
+      };
+      setTimeout(() => {
+        if (!done) {
+          try { pc.close(); } catch (e) {}
+          resolve(null);
+        }
+      }, timeout);
+    } catch (err) {
+      resolve(null);
+    }
+  });
 }
 
 // ─── Composant principal ──────────────────────────────────────────────────────
@@ -20,11 +56,26 @@ function getPublicUrl() {
 export default function PatientQRCode({ patient }) {
   const [showModal, setShowModal] = useState(false);
   const [copied,    setCopied]    = useState(false);
+  const [baseOrigin, setBaseOrigin] = useState(getPublicUrl());
   const printRef = useRef();
+  useEffect(() => {
+  // If running on localhost, try to detect LAN IP and update the base origin
+  if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+    // If developer explicitly set DEV_LOCAL_IP, prefer it and skip detection
+    if (DEV_LOCAL_IP && DEV_LOCAL_IP.length) return;
+
+    detectLocalIP().then(ip => {
+      if (!ip) return;
+      // accept only private LAN addresses — ignore public / carrier / VPN addresses
+      const isPrivate = /^(10\.|192\.168\.|172\.(1[6-9]|2[0-9]|3[0-1])\.)/.test(ip);
+      if (isPrivate) setBaseOrigin(`http://${ip}:${window.location.port}`);
+    }).catch(() => {});
+  }
+}, []);
 
   if (!patient) return null;
 
-  const publicUrl = `${getPublicUrl()}/patient-public/${patient.id}?token=${btoa(patient.numero_dossier || patient.id)}`;
+  const publicUrl = `${baseOrigin}/patient-public/${patient.id}?token=${btoa(patient.numero_dossier || patient.id)}`;
   const qrUrl     = getQRUrl(publicUrl, 300);
   const qrSmall   = getQRUrl(publicUrl, 120);
 
@@ -146,7 +197,16 @@ export default function PatientQRCode({ patient }) {
               {(window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') && (
                 <div style={s.infoBox}>
                   <span style={s.infoIcon}>📱</span>
-                  <span><strong>Pour scanner depuis un téléphone:</strong> Le QR code utilise votre IP locale <code>192.168.1.7</code>. Assurez-vous que votre téléphone est connecté au même réseau Wi-Fi.</span>
+                  <div style={{flex:1}}>
+                    <div style={{ fontWeight: 800, marginBottom: 6 }}>للمسح من الهاتف / Pour scanner depuis un téléphone</div>
+                    <div style={{ fontSize: 13, color: '#0f172a', lineHeight: 1.4 }}>
+                      امسح رمز الـ QR أو افتح الرابط التالي على متصفح هاتفك المتصل بنفس شبكة الواي فاي:
+                      <div style={{ marginTop: 8, fontFamily: 'monospace', background: '#fff', padding: 8, borderRadius: 6 }}>
+                        {`${baseOrigin}/patient-public/${patient.id}?token=${btoa(patient.numero_dossier || patient.id)}`}
+                      </div>
+                      <div style={{ marginTop: 8 }}>تأكد أن الهاتف متصل بنفس الشبكة وأن جدار الحماية يسمح بالوصول للمنفذ.</div>
+                    </div>
+                  </div>
                 </div>
               )}
 

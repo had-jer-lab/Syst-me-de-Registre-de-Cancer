@@ -23,7 +23,9 @@ class User(AbstractBaseUser, PermissionsMixin):
     ROLE_CHOICES = [
         ('admin',      'Administrateur'),
         ('medecin',    'Médecin'),
-        ('biologiste', 'Biologiste'),
+        ('epidimio',   'Épidimio'),
+        ('anapate',    'Anapath'),
+        ('pharmacie',  'Pharmacie'),
     ]
     STATUS_CHOICES = [
         ('actif',    'Actif'),

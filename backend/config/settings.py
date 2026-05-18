@@ -5,9 +5,10 @@ from datetime import timedelta
 
 BASE_DIR = Path(__file__).resolve().parent.parent  # ✅ أولاً
 
-SECRET_KEY = config('SECRET_KEY')
+SECRET_KEY = config('SECRET_KEY', default='django-insecure-temporary-key-for-dev')
 DEBUG = config('DEBUG', cast=bool, default=True)
-ALLOWED_HOSTS = ['localhost', '127.0.0.1']
+DEV_LOCAL_IP = config('DEV_LOCAL_IP', default='192.168.1.8')
+ALLOWED_HOSTS = ['localhost', '127.0.0.1', DEV_LOCAL_IP, '0.0.0.0']
 
 INSTALLED_APPS = [
     'django.contrib.admin',
@@ -62,11 +63,11 @@ WSGI_APPLICATION = 'config.wsgi.application'
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.postgresql',
-        'NAME':     'cancer_registry',
+        'NAME':     'registre_cancer',
         'USER':    'postgres',
-        'PASSWORD': '1234',
+        'PASSWORD': '123',
         'HOST':     config('DB_HOST', default='localhost'),
-        'PORT':     config('DB_PORT', default='5432'),
+        'PORT':     config('DB_PORT', default='5433'),
     }
 }
 
@@ -88,7 +89,12 @@ SIMPLE_JWT = {
 
 CORS_ALLOWED_ORIGINS = [
     "http://localhost:3000",
+    f"http://{DEV_LOCAL_IP}:3000",
 ]
+
+# Allow all origins in DEBUG for easier local testing (optional)
+if DEBUG:
+    CORS_ALLOWED_ORIGINS.append(f"http://{DEV_LOCAL_IP}:3000")
 
 LANGUAGE_CODE = 'fr-fr'
 TIME_ZONE = 'Africa/Algiers'
