@@ -100,7 +100,7 @@ export default function PatientPublicView() {
         // Appel public — on utilise un endpoint de lecture publique
         // Pour l'instant on utilise l'endpoint normal avec un token spécial
         // En production, créez un endpoint /api/patients/public/<id>/ sans auth
-        const res = await fetch(`${API}/patients/${id}/`, {
+        const res = await fetch(`${API}/patients/public/${id}/?token=${encodeURIComponent(token)}`, {
           headers: { 'Content-Type': 'application/json' },
         });
 

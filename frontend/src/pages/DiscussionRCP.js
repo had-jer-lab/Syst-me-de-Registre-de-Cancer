@@ -1126,7 +1126,7 @@ export default function DiscussionRCP() {
                   <div style={s.fieldGroup}>
                     <label style={s.fieldLabel}>Inviter des médecins ({invitedDoctors.length} sélectionné{invitedDoctors.length!==1?'s':''})</label>
                     <div style={s.doctorList}>
-                      {allMedecins.length === 0 && <p style={{ color:'#a0aec0', fontSize:13, padding:12 }}>Aucun médecin disponible</p>}
+                      {allMedecins.length === 0 && <p style={{ color:'#a0aec0', fontSize:13, padding:12 }}>Aucun professionnel disponible</p>}
                       {allMedecins.map(m => {
                         const isSelected = invitedDoctors.includes(m.id);
                         return (
@@ -1134,7 +1134,14 @@ export default function DiscussionRCP() {
                             <div style={{ ...s.doctorAvatar, background:isSelected?'#4A90E2':'#EDF2F7', color:isSelected?'white':'#4a5568' }}>{(m.name||'?')[0].toUpperCase()}</div>
                             <div style={{ flex:1 }}>
                               <div style={{ fontWeight:600, fontSize:14, color:'#2d3748' }}>{m.name}</div>
-                              <div style={{ fontSize:12, color:'#718096' }}>{m.role} • {m.email}</div>
+                              <div style={{ fontSize:12, color:'#718096' }}>{
+                              {
+                                medecin: 'Médecin',
+                                epidimio: 'Épidimio',
+                                anapate: 'Anapath',
+                                pharmacie: 'Pharmacie',
+                              }[m.role] || m.role
+                            } • {m.email}</div>
                             </div>
                             <div style={{ fontSize:18, color:isSelected?'#4A90E2':'#e2e8f0' }}>{isSelected?'✓':'○'}</div>
                           </div>
