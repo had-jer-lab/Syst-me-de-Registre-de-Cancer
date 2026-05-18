@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { usePatient } from '../context/PatientContext';
 import Layout from '../components/Layout';
 import { SC, PageHeader, BtnRow, InfoItem } from '../components/FormFields';
+import DuplicateDetectionModal from '../components/DuplicateDetectionModal';
 
 function fmtDate(str) {
   if (!str) return '—';
@@ -39,6 +40,7 @@ function score(arr, total) {
 }
 
 function CompletionBar({ label, pct }) {
+  const color = pct >= 80 ? '#27ae60' : pct >= 50 ? '#f39c12' : '#4A6CF7';
   return (
     <div style={{ display:'flex', alignItems:'center', gap:12, marginBottom:10 }}>
       <div style={{ width:180, fontSize:12, fontWeight:700, color:'#64748B' }}>{label}</div>
@@ -49,6 +51,9 @@ function CompletionBar({ label, pct }) {
     </div>
   );
 }
+
+// Alias used elsewhere in JSX
+const Bar = CompletionBar;
 
 function Donut({ pct }) {
   const r = 22, circ = 2 * Math.PI * r;
@@ -104,13 +109,18 @@ const SAVE_STEPS = [
 
 export default function Page5() {
   const navigate = useNavigate();
-  const { data, update } = usePatient();
+  const { data, update, reset } = usePatient();
+  const [duplicateModal, setDuplicateModal] = useState(null);
+  const [merged, setMerged] = useState(false);
+  const [saveStep, setSaveStep] = useState(0);
   const [checks, setChecks]       = useState({ c1: false, c2: false, c3: false });
   const [unchecked, setUnchecked] = useState([]);
   const [showSuccess, setShowSuccess] = useState(false);
   const [saving, setSaving]       = useState(false);
   const [saveError, setSaveError] = useState('');
   const [createdDossier, setCreatedDossier] = useState('');
+  const [showError, setShowError] = useState('');
+  const [mergedFlag, setMergedFlag] = useState(false);
 
   // ── Scores de complétude ─────────────────────────────────────────────────
   const s1 = score([data.first_name, data.last_name, data.date_naissance, data.sexe, data.phone, data.national_id], 6);
@@ -120,6 +130,10 @@ export default function Page5() {
   const global = Math.round((s1+s2+s3+s4)/4);
 
   const fullName = `${data.prenom || '—'} ${data.nom || '—'}`;
+
+  const covLabels = { cnas: 'CNAS', casnos: 'CASNOS', pmsr: 'PMSR', aucune: 'Aucune', autre: 'Autre' };
+  const famLabels = { celibataire: 'Célibataire', marie: 'Marié(e)', divorce: 'Divorcé(e)', veuf: 'Veuf / Veuve' };
+  const sexeLabel = data.sexe === 'M' ? '♂ Masculin' : data.sexe === 'F' ? '♀ Féminin' : '';
 
   const toggleCheck = (key) => setChecks(prev => ({ ...prev, [key]: !prev[key] }));
 
@@ -164,19 +178,34 @@ export default function Page5() {
         ...(data.wilaya ? { wilaya_text: data.wilaya } : {}),
       };
 
-      const patient = await patRes.json();
+      setSaveStep(0);
+      // create patient
+      const patientRes = await fetch(`http://localhost:8000/api/patients/`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(patientPayload),
+      });
+      if (!patientRes.ok) {
+        const e = await patientRes.json().catch(() => ({}));
+        throw e;
+      }
+      const patient = await patientRes.json();
       setCreatedDossier(patient.numero_dossier || '');
+      setSaveStep(1);
 
       // ── 3. Créer le cancer si organe renseigné ────────────────────
       if (data.organe) {
         const cancerPayload = {
-          patient:             patientId,
+          patient:             patient.id,
           ...(data.cancer_type_id ? { cancer_type: parseInt(data.cancer_type_id) } : {}),
           ...(data.organe ? { organe: data.organe } : {}),
           type_tumeur:         normalizeTypeTumeur(data.type_tumeur) || '',
           sous_type:           data.sous_type          || '',
           lateralite:          data.lateralite         || '',
-          cim10_code:          cimCode,
+          cim10_code:          (data.cim10_code || data.cim10_manual) || '',
           date_symptomes:      data.date_symptomes     || null,
           date_diagnostic:     data.date_diagnostic    || null,
           base_diagnostic:     data.base_diagnostic    || [],
@@ -210,6 +239,7 @@ export default function Page5() {
           },
           body: JSON.stringify(cancerPayload),
         });
+        setSaveStep(2);
       }
 
       // ── 4. Succès ─────────────────────────────────────────────────
@@ -229,7 +259,7 @@ export default function Page5() {
           .map(([k,v])=>`${fieldLabels[k]||k}: ${Array.isArray(v)?v[0]:v}`);
         msg = parts.join(' | ') || err.detail || err.non_field_errors?.[0] || JSON.stringify(err);
       } else msg = String(err);
-      setError('Erreur : ' + msg);
+      setSaveError('Erreur : ' + msg);
     } finally {
       setSaving(false);
     }
@@ -308,6 +338,20 @@ export default function Page5() {
     }
 
     return updatedPatient;
+  }
+
+  // Simple helper to create a patient (and optionally associated cancer later)
+  async function createPatientAndCancer(patientPayload, token, forceCreate = false) {
+    const res = await fetch(`http://localhost:8000/api/patients/`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify(patientPayload),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw err;
+    }
+    return await res.json();
   }
 
   // ── Helper: convert DD/MM/YYYY → YYYY-MM-DD for API ─────────────────────────
@@ -419,7 +463,7 @@ export default function Page5() {
     <Layout currentStep={5} progress={100}>
 
       {/* SUCCESS */}
-      {success && (
+      {showSuccess && (
         <div className="overlay">
           <div className="success-box">
             <div className="suc-icon">✓</div>
@@ -427,7 +471,7 @@ export default function Page5() {
             <div className="suc-sub">
               Le dossier de <strong>{fullName}</strong> a été créé avec succès.
             </div>
-            {dossier && <div className="suc-num">{dossier}</div>}
+            {createdDossier && <div className="suc-num">{createdDossier}</div>}
             <div style={{ display:'flex', gap:10, justifyContent:'center', flexWrap:'wrap' }}>
               <button className="btn btn-ghost" onClick={() => { reset(); navigate('/page1'); }}>
                 ➕ Nouveau patient
@@ -577,11 +621,11 @@ export default function Page5() {
           </div>
 
           {/* Erreur */}
-          {error && (
+          {saveError && (
             <div style={{ padding:'12px 16px', background:'rgba(231,76,60,0.07)',
               border:'1.5px solid rgba(231,76,60,0.25)', borderRadius:10,
               fontSize:13, color:'#e74c3c', fontWeight:700, whiteSpace:'pre-wrap' }}>
-              ⚠ {error}
+              ⚠ {saveError}
             </div>
           )}
 
