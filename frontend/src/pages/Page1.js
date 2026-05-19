@@ -6,6 +6,7 @@ import { SC, Field, IconInput, Select, TagGroup, PageHeader, BtnRow } from '../c
 import { MicButton } from '../components/MicButton';
 import { VoiceFillPanel } from '../components/VoiceFillPanel';
 import { IDCardScanner } from '../components/IDCardScanner';
+import { validatePhone, validateNIN } from '../utils/validators';
 
 // ─── Data ────────────────────────────────────────────────────────────────────
 
@@ -94,7 +95,6 @@ function calcAge(dob) {
   return age > 0 ? `${age} ans` : '';
 }
 
-import { validatePhone, validateNIN } from '../utils/validators';
 
 // ─── MicField wrapper ─────────────────────────────────────────────────────────
 

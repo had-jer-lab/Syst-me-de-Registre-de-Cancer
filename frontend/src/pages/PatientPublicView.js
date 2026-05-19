@@ -79,8 +79,8 @@ function ErrorScreen({ message }) {
 
 export default function PatientPublicView() {
   const { id } = useParams();
-  const [searchParams] = useSearchParams();
-  const token = searchParams.get('token');
+  const token = new URLSearchParams(window.location.hash.split('?')[1] || window.location.search).get('token');
+
 
   const [patient,  setPatient]  = useState(null);
   const [loading,  setLoading]  = useState(true);

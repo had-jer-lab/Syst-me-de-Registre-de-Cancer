@@ -142,20 +142,14 @@ class CancerStatusHistorySerializer(serializers.ModelSerializer):
 # ─── Cancer (lecture complète avec nested) ────────────────────────────────────
 
 class CancerSerializer(serializers.ModelSerializer):
-    cancer_type_name = serializers.SerializerMethodField()
-    triple_negatif   = serializers.BooleanField(read_only=True)
-    treatments       = TreatmentSerializer(many=True, read_only=True)
-    biological_exams = BiologicalExamSerializer(many=True, read_only=True)
-    imaging_exams    = ImagingExamSerializer(many=True, read_only=True)
-    histology        = HistologySerializer(read_only=True)
-    metastases       = MetastasisSerializer(many=True, read_only=True)
-    follow_ups       = FollowUpSerializer(many=True, read_only=True)
-    status_history   = CancerStatusHistorySerializer(many=True, read_only=True)
-
-    def get_cancer_type_name(self, obj):
-        if obj.cancer_type:
-            return obj.cancer_type.name
-        return None
+    cancer_type_name  = serializers.CharField(source='cancer_type.name', read_only=True)
+    treatments        = TreatmentSerializer(many=True, read_only=True)
+    biological_exams  = BiologicalExamSerializer(many=True, read_only=True)
+    imaging_exams     = ImagingExamSerializer(many=True, read_only=True)
+    histology         = HistologySerializer(read_only=True)
+    metastases        = MetastasisSerializer(many=True, read_only=True)
+    follow_ups        = FollowUpSerializer(many=True, read_only=True)
+    status_history    = CancerStatusHistorySerializer(many=True, read_only=True)
 
     class Meta:
         model  = Cancer
@@ -258,32 +252,14 @@ class ConsultationSerializer(serializers.ModelSerializer):
         return super().create(validated_data)
 
 
-# ─── 🆕 Habitudes & Facteurs de risque ───────────────────────────────────────
-
-class PatientHabitSerializer(serializers.ModelSerializer):
-    name = serializers.CharField(source='habit.name', read_only=True)
-
-    class Meta:
-        model  = PatientHabit
-        fields = ['id', 'name', 'frequency', 'duration_years']
-
-
-class PatientRiskFactorSerializer(serializers.ModelSerializer):
-    name = serializers.CharField(source='risk_factor.name', read_only=True)
-
-    class Meta:
-        model  = PatientRiskFactor
-        fields = ['id', 'name']
-
-
-# ─── Patient liste (léger) ────────────────────────────────────────────────────
+# ─── Patient (liste — version légère) ────────────────────────────────────────
 
 class PatientListSerializer(serializers.ModelSerializer):
     age           = serializers.ReadOnlyField()
     full_name     = serializers.ReadOnlyField()
-    commune_name  = serializers.CharField(source='commune.name', read_only=True)
+    commune_name  = serializers.CharField(source='commune.name',   read_only=True)
     wilaya_name   = serializers.CharField(source='commune.wilaya.name', read_only=True)
-    hospital_name = serializers.CharField(source='hospital.name', read_only=True)
+    hospital_name = serializers.CharField(source='hospital.name',  read_only=True)
     medecin_nom   = serializers.SerializerMethodField()
     dernier_cancer = serializers.SerializerMethodField()
     cancers       = CancerSerializer(many=True, read_only=True)
@@ -294,17 +270,24 @@ class PatientListSerializer(serializers.ModelSerializer):
             'id', 'numero_dossier', 'national_id',
             'first_name', 'last_name', 'full_name',
             'date_naissance', 'age', 'sexe',
-            'phone', 'email',
-            'situation_familiale', 'profession',
-            'adresse',
+            'phone',
             'commune', 'commune_name', 'wilaya_name',
             'hospital', 'hospital_name',
-            'couverture_sociale',
             'created_by', 'medecin_nom',
             'data_source', 'created_at', 'updated_at',
             'dernier_cancer', 'cancers'
         ]
         read_only_fields = ['numero_dossier', 'created_by', 'created_at', 'updated_at']
+
+    def get_wilaya_name(self, obj):
+        if obj.commune and obj.commune.wilaya:
+            return obj.commune.wilaya.name
+        return None
+
+    def get_hospital_name(self, obj):
+        if obj.hospital:
+            return obj.hospital.name
+        return None
 
     def get_medecin_nom(self, obj):
         if obj.created_by:
@@ -316,17 +299,10 @@ class PatientListSerializer(serializers.ModelSerializer):
         if not cancer:
             return None
         return {
-            'id':              cancer.id,
-            'organe':          cancer.cancer_type.name if cancer.cancer_type else '—',
-            'sous_type':       cancer.sous_type or '',
-            'stade':           cancer.stade_clinique or cancer.stade_pathologique or '—',
-            'tnm':             cancer.tnm or '',
+            'id':             cancer.id,
+            'organe':         cancer.cancer_type.name if cancer.cancer_type else '—',
+            'stade':          cancer.stade_clinique or cancer.stade_pathologique or '—',
             'date_diagnostic': str(cancer.date_diagnostic) if cancer.date_diagnostic else '—',
-            'localise':        cancer.localise,
-            'metastatique':    cancer.metastatique,
-            'recidive':        cancer.recidive,
-            'triple_negatif':  cancer.triple_negatif,
-            'nb_traitements':  cancer.treatments.count(),
         }
 
 
@@ -335,33 +311,23 @@ class PatientListSerializer(serializers.ModelSerializer):
 class PatientDetailSerializer(serializers.ModelSerializer):
     age           = serializers.ReadOnlyField()
     full_name     = serializers.ReadOnlyField()
-    commune_name  = serializers.SerializerMethodField()
-    wilaya_name   = serializers.SerializerMethodField()
-    hospital_name = serializers.CharField(source='hospital.name',       read_only=True, allow_null=True)
-    wilaya_text   = serializers.CharField(write_only=True, required=False, allow_blank=True)
-    commune_text  = serializers.CharField(write_only=True, required=False, allow_blank=True)
+    commune_name  = serializers.CharField(source='commune.name',        read_only=True)
+    wilaya_name   = serializers.CharField(source='commune.wilaya.name', read_only=True)
+    hospital_name = serializers.CharField(source='hospital.name',       read_only=True)
     medecin_nom   = serializers.SerializerMethodField()
     cancers       = CancerSerializer(many=True, read_only=True)
     consultations = ConsultationSerializer(many=True, read_only=True)
-    habits        = PatientHabitSerializer(many=True, read_only=True)
-    risk_factors  = PatientRiskFactorSerializer(many=True, read_only=True)
+    habits        = serializers.SerializerMethodField()
+    risk_factors  = serializers.SerializerMethodField()
 
     class Meta:
         model  = Patient
         fields = [
             'id', 'numero_dossier', 'national_id',
             'first_name', 'last_name', 'full_name',
-            'date_naissance', 'age', 'sexe',
-            'situation_familiale', 'profession',
-            'phone', 'email', 'adresse',
+            'date_naissance', 'age', 'sexe', 'phone',
             'commune', 'commune_name', 'wilaya_name',
-            'wilaya_text', 'commune_text',
             'hospital', 'hospital_name',
-            'couverture_sociale',
-            'poids', 'taille', 'imc',
-            'allergies', 'autres_allergies',
-            'antecedents_familiaux', 'antecedents_fam_yn',
-            'observations',
             'created_by', 'medecin_nom',
             'is_merged', 'merged_into_patient',
             'data_source', 'created_at', 'updated_at',
@@ -370,81 +336,43 @@ class PatientDetailSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = ['numero_dossier', 'created_by', 'created_at', 'updated_at']
 
-    def get_medecin_nom(self, obj):
-        if obj.created_by:
-            return f"Dr. {obj.created_by.prenom} {obj.created_by.nom}"
-        return '—'
-
-    def get_commune_name(self, obj):
-        if obj.commune:
-            return obj.commune.name
-        return None
-
     def get_wilaya_name(self, obj):
         if obj.commune and obj.commune.wilaya:
             return obj.commune.wilaya.name
         return None
 
-    def _resolve_commune(self, validated_data):
-        commune_text = validated_data.pop('commune_text', None)
-        wilaya_text  = validated_data.pop('wilaya_text', None)
-        if commune_text and not validated_data.get('commune'):
-            commune = None
-            if wilaya_text:
-                from .models import Wilaya, Commune
-                wilaya = Wilaya.objects.filter(name__iexact=wilaya_text).first()
-                if not wilaya:
-                    wilaya = Wilaya.objects.create(name=wilaya_text)
-                commune = Commune.objects.filter(name__iexact=commune_text, wilaya=wilaya).first()
-                if not commune:
-                    commune = Commune.objects.create(name=commune_text, wilaya=wilaya)
-            else:
-                from .models import Commune
-                commune = Commune.objects.filter(name__iexact=commune_text).first()
-            if commune:
-                validated_data['commune'] = commune
-        return validated_data
+    def get_hospital_name(self, obj):
+        if obj.hospital:
+            return obj.hospital.name
+        return None
+
+    def get_medecin_nom(self, obj):
+        if obj.created_by:
+            return f"Dr. {obj.created_by.prenom} {obj.created_by.nom}"
+        return '—'
+
+    def get_habits(self, obj):
+        return [h.habit.name for h in obj.habits.all()]
+
+    def get_risk_factors(self, obj):
+        return [r.risk_factor.name for r in obj.risk_factors.all()]
 
     def create(self, validated_data):
         validated_data = self._resolve_commune(validated_data)
         validated_data['created_by'] = self.context['request'].user
         return super().create(validated_data)
-    def update(self, instance, validated_data):
-        validated_data = self._resolve_commune(validated_data)
-        return super().update(instance, validated_data)
+
+
 # ─── Cancer (create/update) ────────────────────────────────────────────────
 
 class CancerCreateSerializer(serializers.ModelSerializer):
-    organe = serializers.CharField(write_only=True, required=False, allow_blank=True)
-    type_tumeur = serializers.CharField(required=False, allow_blank=True)
-    sous_type = serializers.CharField(required=False, allow_blank=True)
-    date_diagnostic = serializers.DateField(required=False, allow_null=True)
-
     class Meta:
         model  = Cancer
         fields = [
-            'id', 'patient', 'cancer_type', 'organe',
-            'type_tumeur', 'sous_type',
+            'id', 'patient', 'cancer_type',
             'stade_clinique', 'stade_pathologique', 'tnm', 'grade',
             'date_diagnostic', 'data_source',
         ]
-
-    def _resolve_organe(self, validated_data):
-        organe = validated_data.pop('organe', None)
-        if organe and not validated_data.get('cancer_type'):
-            cancer_type = CancerType.objects.filter(name__iexact=organe).first()
-            if not cancer_type:
-                cancer_type = CancerType.objects.create(name=organe)
-            validated_data['cancer_type'] = cancer_type
-        return validated_data
-
-    def create(self, validated_data):
-        validated_data = self._resolve_organe(validated_data)
-        return super().create(validated_data)
-
-    def update(self, instance, validated_data):
-        validated_data = self._resolve_organe(validated_data)
-        return super().update(instance, validated_data)
 
     def validate_patient(self, patient):
         # Seul le médecin référent peut ajouter un cancer

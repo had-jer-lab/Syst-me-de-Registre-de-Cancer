@@ -5,10 +5,13 @@ from datetime import timedelta
 
 BASE_DIR = Path(__file__).resolve().parent.parent  # ✅ أولاً
 
+# Adresse IP locale utilisée pour permettre l'accès depuis un téléphone sur le LAN
+# Configurez `DEV_LOCAL_IP` dans votre .env si besoin (ex: 192.168.1.8)
+DEV_LOCAL_IP = config('DEV_LOCAL_IP', default='')
+
 SECRET_KEY = config('SECRET_KEY', default='django-insecure-temporary-key-for-dev')
 DEBUG = config('DEBUG', cast=bool, default=True)
-DEV_LOCAL_IP = config('DEV_LOCAL_IP', default='192.168.1.8')
-ALLOWED_HOSTS = ['localhost', '127.0.0.1', DEV_LOCAL_IP, '0.0.0.0']
+ALLOWED_HOSTS = ['localhost', '127.0.0.1']
 
 INSTALLED_APPS = [
     'django.contrib.admin',
@@ -89,12 +92,17 @@ SIMPLE_JWT = {
 
 CORS_ALLOWED_ORIGINS = [
     "http://localhost:3000",
-    f"http://{DEV_LOCAL_IP}:3000",
+    "http://127.0.0.1:3000",
 ]
 
-# Allow all origins in DEBUG for easier local testing (optional)
-if DEBUG:
-    CORS_ALLOWED_ORIGINS.append(f"http://{DEV_LOCAL_IP}:3000")
+# If a DEV_LOCAL_IP is configured, allow it as well (useful for mobile testing on LAN)
+if DEV_LOCAL_IP:
+    try:
+        # basic validation: avoid adding localhost duplicates
+        if DEV_LOCAL_IP not in ('localhost', '127.0.0.1'):
+            CORS_ALLOWED_ORIGINS.append(f"http://{DEV_LOCAL_IP}:3000")
+    except Exception:
+        pass
 
 LANGUAGE_CODE = 'fr-fr'
 TIME_ZONE = 'Africa/Algiers'
@@ -103,7 +111,3 @@ USE_TZ = True
 
 STATIC_URL = '/static/'
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
-
-# ✅ Media files — بعد BASE_DIR
-MEDIA_URL  = '/media/'
-MEDIA_ROOT = os.path.join(BASE_DIR, 'media')

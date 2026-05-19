@@ -51,70 +51,29 @@ class Hospital(models.Model):
 # ─── Patient ──────────────────────────────────────────────────────────────────
 
 class Patient(models.Model):
-    SEXE_CHOICES   = [('M', 'Masculin'), ('F', 'Féminin')]
+    SEXE_CHOICES = [('M', 'Masculin'), ('F', 'Féminin')]
     SOURCE_CHOICES = [
         ('manual', 'Saisie manuelle'),
         ('import', 'Import CSV/Excel'),
         ('oedi',   'OEDI'),
     ]
-    FAMILLE_CHOICES = [
-        ('celibataire', 'Célibataire'),
-        ('marie',       'Marié(e)'),
-        ('divorce',     'Divorcé(e)'),
-        ('veuf',        'Veuf / Veuve'),
-    ]
-    COUVERTURE_CHOICES = [
-        ('cnas',    'CNAS'),
-        ('casnos',  'CASNOS'),
-        ('pmsr',    'PMSR'),
-        ('aucune',  'Aucune'),
-        ('autre',   'Autre'),
-    ]
 
-    # ── Identité ──────────────────────────────────────────────────────────────
-    numero_dossier      = models.CharField(max_length=30, unique=True, blank=True)
-    national_id         = models.CharField(max_length=20, unique=True, null=True, blank=True)
-    first_name          = models.CharField(max_length=100)
-    last_name           = models.CharField(max_length=100)
-    date_naissance      = models.DateField()
-    sexe                = models.CharField(max_length=1, choices=SEXE_CHOICES)
-    situation_familiale = models.CharField(max_length=20, choices=FAMILLE_CHOICES, blank=True)
-    profession          = models.CharField(max_length=100, blank=True)
-
-    # ── Contact ───────────────────────────────────────────────────────────────
-    phone               = models.CharField(max_length=20, blank=True)
-    email               = models.EmailField(blank=True)
-
-    # ── Adresse ───────────────────────────────────────────────────────────────
-    commune             = models.ForeignKey(Commune,  on_delete=models.SET_NULL, null=True, blank=True, related_name='patients')
-    adresse             = models.CharField(max_length=300, blank=True)
-
-    # ── Prise en charge ───────────────────────────────────────────────────────
-    hospital            = models.ForeignKey(Hospital, on_delete=models.SET_NULL, null=True, blank=True, related_name='patients')
-    couverture_sociale  = models.CharField(max_length=20, choices=COUVERTURE_CHOICES, blank=True)
-
-    # ── Anthropométrie (Page4) ────────────────────────────────────────────
-    poids                  = models.DecimalField(max_digits=5, decimal_places=2, null=True, blank=True)
-    taille                 = models.DecimalField(max_digits=5, decimal_places=2, null=True, blank=True)
-    imc                    = models.DecimalField(max_digits=4, decimal_places=1, null=True, blank=True)
-
-    # ── Antécédents & Allergies (Page4) ──────────────────────────────────
-    allergies              = models.TextField(blank=True)
-    autres_allergies       = models.TextField(blank=True)
-    antecedents_familiaux  = models.JSONField(default=list, blank=True)
-    antecedents_fam_yn     = models.CharField(max_length=20, blank=True)
-
-    # ── Observations libres (Page4) ───────────────────────────────────────
-    observations           = models.TextField(blank=True)
-
-    # ── Méta ──────────────────────────────────────────────────────────────────
-    created_by          = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, related_name='patients_crees')
-    is_merged           = models.BooleanField(default=False)
-    merged_into_patient = models.ForeignKey('self', on_delete=models.SET_NULL, null=True, blank=True, related_name='merged_patients')
-    data_source         = models.CharField(max_length=20, choices=SOURCE_CHOICES, default='manual')
-    created_at          = models.DateTimeField(auto_now_add=True)
-    updated_at          = models.DateTimeField(auto_now=True)
-    deleted_at          = models.DateTimeField(null=True, blank=True)
+    numero_dossier       = models.CharField(max_length=30, unique=True, blank=True)
+    national_id          = models.CharField(max_length=20, unique=True, null=True, blank=True)
+    first_name           = models.CharField(max_length=100)
+    last_name            = models.CharField(max_length=100)
+    date_naissance       = models.DateField()
+    sexe                 = models.CharField(max_length=1, choices=SEXE_CHOICES)
+    phone                = models.CharField(max_length=20, blank=True)
+    commune              = models.ForeignKey(Commune,  on_delete=models.SET_NULL, null=True, blank=True, related_name='patients')
+    hospital             = models.ForeignKey(Hospital, on_delete=models.SET_NULL, null=True, blank=True, related_name='patients')
+    created_by           = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, related_name='patients_crees')
+    is_merged            = models.BooleanField(default=False)
+    merged_into_patient  = models.ForeignKey('self', on_delete=models.SET_NULL, null=True, blank=True, related_name='merged_patients')
+    data_source          = models.CharField(max_length=20, choices=SOURCE_CHOICES, default='manual')
+    created_at           = models.DateTimeField(auto_now_add=True)
+    updated_at           = models.DateTimeField(auto_now=True)
+    deleted_at           = models.DateTimeField(null=True, blank=True)
 
     class Meta:
         ordering = ['-created_at']
@@ -352,6 +311,47 @@ class FollowUp(models.Model):
     statut_clinique = models.CharField(max_length=100, blank=True)
     observation     = models.TextField(blank=True)
 
+    class Meta:
+        ordering = ['-date_visite']
+
+
+class DemandeExamen(models.Model):
+    TYPE_CHOICES = [
+        ('biologie', 'Bilan biologique'),
+        ('imagerie', 'Imagerie radiologique'),
+    ]
+    STATUT_CHOICES = [
+        ('en_attente', 'En attente'),
+        ('en_cours', 'En cours'),
+        ('resultat_disponible', 'Résultat disponible'),
+        ('annule', 'Annulé'),
+    ]
+    URGENCE_CHOICES = [
+        ('normal', 'Normal'),
+        ('urgent', 'Urgent'),
+        ('tres_urgent', 'Très urgent'),
+    ]
+
+    patient          = models.ForeignKey(Patient, on_delete=models.CASCADE, related_name='demandes_examens')
+    cancer           = models.ForeignKey(Cancer, on_delete=models.SET_NULL, null=True, blank=True, related_name='demandes_examens')
+    medecin          = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, related_name='demandes_envoyees')
+    type_demande     = models.CharField(max_length=20, choices=TYPE_CHOICES)
+    statut           = models.CharField(max_length=20, choices=STATUT_CHOICES, default='en_attente')
+    urgence          = models.CharField(max_length=11, choices=URGENCE_CHOICES, default='normal')
+    examens_demandes = models.JSONField(default=list)
+    motif_clinique   = models.TextField(blank=True)
+    observations     = models.TextField(blank=True)
+    date_demande     = models.DateTimeField(auto_now_add=True)
+    date_souhaitee   = models.DateField(null=True, blank=True)
+    resultat_texte   = models.TextField(blank=True)
+    date_resultat    = models.DateField(null=True, blank=True)
+
+    class Meta:
+        ordering = ['-date_demande']
+
+    def __str__(self):
+        return f"Demande d'examen #{self.id} — {self.patient}"
+
 
 class CancerStatusHistory(models.Model):
     cancer      = models.ForeignKey(Cancer, on_delete=models.CASCADE, related_name='status_history')
@@ -428,102 +428,55 @@ class DuplicateCase(models.Model):
     status     = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending')
     created_at = models.DateTimeField(auto_now_add=True)
 
-# ─── Pathologies chroniques associées (Page3) ─────────────────────────────────
-# Champ manquant dans la version originale — ajouté pour couvrir Page3
-
-class PathoChronique(models.Model):
-    patient     = models.ForeignKey(Patient, on_delete=models.CASCADE, related_name='pathos_chroniques')
-    name        = models.CharField(max_length=200)
-    date_debut  = models.CharField(max_length=50, blank=True)  # saisie libre depuis le formulaire
-
-    class Meta:
-        ordering = ['name']
-
     def __str__(self):
-        return f"{self.name} — {self.patient}"
+        return f"Doublon entre {self.patient_1} et {self.patient_2}"
 
 
-# ─── Anthropométrie (Page4) — endpoint dédié pour /anthropometry/ ────────────
-# Les champs poids/taille/imc sont désormais sur le modèle Patient directement.
-# Ce serializer intermédiaire permet un PATCH partiel via l'endpoint /anthropometry/.
-# Aucun modèle supplémentaire nécessaire — les champs sont sur Patient.
-
-
-# ─── BiologicalExam — extension bilan sanguin ─────────────────────────────────
-# Le modèle BiologicalExam existant couvre déjà les marqueurs tumoraux et le bilan.
-# Rappel des champs utilisés par Page5 :
-#   type_analyse  → nom du marqueur ou de l'analyse ('CEA', 'NFS', 'Biopsie / Anatomopathologie'…)
-#   valeur        → valeur numérique (DecimalField)
-#   resultat      → valeur textuelle (pour NFS, statut biopsie…)
-#   unite         → unité ('ng/mL', 'U/mL', '%'…)
-#   date_analyse  → date de l'analyse
-
-
-# ─── NOTE MIGRATION ───────────────────────────────────────────────────────────
-# Après ce fichier, exécuter :
-#   python manage.py makemigrations patients
-#   python manage.py migrate
-#
-# Nouveaux champs ajoutés sur Patient :
-#   poids, taille, imc, allergies, autres_allergies,
-#   antecedents_familiaux (JSONField), antecedents_fam_yn, observations
-#
-# Nouveau modèle : PathoChronique
-#
-# Endpoints backend à créer (si pas encore existants) :
-#   POST /api/patients/{id}/anthropometry/        → PATCH Patient (poids, taille, imc…)
-#   POST /api/patients/{id}/habits/               → créer PatientHabit
-#   POST /api/patients/{id}/risk-factors/         → créer PatientRiskFactor
-#   POST /api/patients/{id}/cancers/{cid}/biological-exams/  → BiologicalExam
-#   POST /api/patients/{id}/cancers/{cid}/imaging-exams/     → ImagingExam
-#   POST /api/patients/{id}/cancers/{cid}/status-history/    → CancerStatusHistory
-
-
-
-
-# ─── À ajouter à la fin de patients/models.py ────────────────────────────────
-
-class DemandeExamen(models.Model):
-
+class Notification(models.Model):
     TYPE_CHOICES = [
-        ('biologie',  'Bilan biologique'),
-        ('imagerie',  'Imagerie radiologique'),
-    ]
-    STATUT_CHOICES = [
-        ('en_attente',           'En attente'),
-        ('en_cours',             'En cours'),
-        ('resultat_disponible',  'Résultat disponible'),
-        ('annule',               'Annulé'),
-    ]
-    URGENCE_CHOICES = [
-        ('normal',      'Normal'),
-        ('urgent',      'Urgent'),
-        ('tres_urgent', 'Très urgent'),
+        ('form_submission', 'Formulaire soumis'),
+        ('doublon', 'Doublon détecté'),
+        ('rcp', 'Réunion RCP'),
+        ('system', 'Système'),
     ]
 
-    patient          = models.ForeignKey(Patient,    on_delete=models.CASCADE,   related_name='demandes_examens')
-    cancer           = models.ForeignKey('Cancer',   on_delete=models.SET_NULL,  null=True, blank=True, related_name='demandes_examens')
-    medecin          = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, related_name='demandes_envoyees')
-
-    type_demande     = models.CharField(max_length=20, choices=TYPE_CHOICES)
-    statut           = models.CharField(max_length=25, choices=STATUT_CHOICES, default='en_attente')
-    urgence          = models.CharField(max_length=15, choices=URGENCE_CHOICES, default='normal')
-
-    # Liste des examens demandés, ex: ["NFS", "CRP", "Glycémie"]
-    examens_demandes = models.JSONField(default=list)
-
-    motif_clinique   = models.TextField(blank=True)
-    observations     = models.TextField(blank=True)
-
-    date_demande     = models.DateTimeField(auto_now_add=True)
-    date_souhaitee   = models.DateField(null=True, blank=True)
-
-    # Résultat renseigné par le biologiste/radiologue
-    resultat_texte   = models.TextField(blank=True)
-    date_resultat    = models.DateField(null=True, blank=True)
+    user       = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='patient_notifications')
+    patient    = models.ForeignKey(Patient, on_delete=models.SET_NULL, null=True, blank=True)
+    type       = models.CharField(max_length=30, choices=TYPE_CHOICES)
+    title      = models.CharField(max_length=200)
+    message    = models.TextField()
+    data       = models.JSONField(default=dict, blank=True)
+    is_read    = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
-        ordering = ['-date_demande']
+        ordering = ['-created_at']
 
     def __str__(self):
-        return f"{self.get_type_demande_display()} — {self.patient} ({self.statut})"
+        return f"Notification {self.type} pour {self.user}"
+
+
+class PatientFormToken(models.Model):
+    patient       = models.OneToOneField(Patient, on_delete=models.CASCADE, related_name='form_token')
+    token         = models.UUIDField(unique=True)
+    fields_config = models.JSONField(default=list)
+    is_active     = models.BooleanField(default=True)
+    created_at    = models.DateTimeField(auto_now_add=True)
+    updated_at    = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f"Token formulaire {self.patient}"
+
+
+class PatientFormSubmission(models.Model):
+    patient        = models.ForeignKey(Patient, on_delete=models.CASCADE, related_name='form_submissions')
+    form_token     = models.ForeignKey(PatientFormToken, on_delete=models.SET_NULL, null=True)
+    submitted_data = models.JSONField(default=dict)
+    ip_address     = models.GenericIPAddressField(null=True, blank=True)
+    created_at     = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"Soumission formulaire #{self.id} pour {self.patient}"
