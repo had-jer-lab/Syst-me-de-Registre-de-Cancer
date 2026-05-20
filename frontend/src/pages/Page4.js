@@ -51,7 +51,7 @@ export default function Page4() {
   };
 
   return (
-    <Layout currentStep={4} progress={80}>
+    <Layout currentStep={5} progress={80}>
       <PageHeader
         icon="🌿"
         iconBg="linear-gradient(135deg,#00C9A7,#00a98b)"

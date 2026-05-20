@@ -61,7 +61,7 @@ export default function Page3() {
   };
 
   return (
-    <Layout currentStep={3} progress={60}>
+    <Layout currentStep={4} progress={60}>
       <PageHeader
         icon="🔬"
         iconBg="linear-gradient(135deg,#FFA26B,#ffbf97)"
@@ -209,7 +209,7 @@ export default function Page3() {
         </div>
       </div>
 
-      <BtnRow onBack={() => navigate('/page2')} onNext={() => navigate('/page4')} />
+      <BtnRow onBack={() => navigate('/page6')} onNext={() => navigate('/page4')} />
     </Layout>
   );
 }

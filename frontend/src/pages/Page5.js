@@ -607,7 +607,7 @@ export default function Page5() {
   };
 
   return (
-    <Layout currentStep={5} progress={100}>
+    <Layout currentStep={6} progress={100}>
       {/* SUCCESS OVERLAY */}
       {showSuccess && (
         <div className="overlay">

@@ -68,8 +68,6 @@ const CIM10_LIST = [
   {code:'C43',label:'C43 — Mélanome'},{code:'C71',label:'C71 — Cerveau'},
 ];
 
-// Traitement en cours — uniquement dans code 3
-const TRAITEMENTS = ['Chimiothérapie','Radiothérapie','Chirurgie','Immunothérapie','Hormonothérapie','Thérapie ciblée','Aucun'];
 
 /* ─── Composants UI ──────────────────────────────────────────────────────── */
 
@@ -329,14 +327,7 @@ export default function Page2() {
             <MultiCheck options={BASE_DIAG} value={data.base_diagnostic||[]} onChange={up('base_diagnostic')} />
           </SectionBlock>
 
-          {/* H — Traitement en cours (from code 3) */}
-          <SectionBlock label="H — Traitement en cours" color="#16a085">
-            <Tags
-              options={TRAITEMENTS}
-              value={data.trtActuel}
-              onChange={up('trtActuel')}
-            />
-          </SectionBlock>
+          
 
         </div>
 
@@ -477,7 +468,7 @@ export default function Page2() {
         </div>
       </div>
 
-      <BtnRow onBack={() => navigate('/page1')} onNext={() => navigate('/page3')} nextLabel="Suivant → Traitements" />
+      <BtnRow onBack={() => navigate('/page1')} onNext={() => navigate('/page6')} nextLabel="Suivant" />
     </Layout>
   );
 }

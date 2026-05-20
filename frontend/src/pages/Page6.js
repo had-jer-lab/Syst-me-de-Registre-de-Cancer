@@ -345,7 +345,7 @@ export default function Page6() {
       <BtnRow
         onBack={() => navigate('/page2')}
         onNext={() => navigate('/page3')}
-        nextLabel="Suivant → Biologie & Imagerie"
+        nextLabel="Suivant "
       />
     </Layout>
   );
