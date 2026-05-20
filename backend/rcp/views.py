@@ -239,15 +239,12 @@ def rcp_details(request, rcp_id):
             "email": p.user.email,
         })
 
-    # ─────────────────────────────────────────
-    # امتدادات ونوع MIME للصور — لكشف رسائل الصور القديمة
-    # ─────────────────────────────────────────
     import os as _os
     IMAGE_EXTENSIONS = {'.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp', '.svg', '.tiff', '.tif', '.heic', '.avif'}
 
     messages = []
     for m in rcp.messages.select_related('user').order_by('created_at'):
-        msg_type = m.msg_type  # القيمة المخزنة في DB
+        msg_type = m.msg_type
 
         msg_data = {
             "id":       m.id,
@@ -265,15 +262,11 @@ def rcp_details(request, rcp_id):
 
             if msg_type == 'voice':
                 msg_data["duration"] = _fmt_duration(m.duration or 0)
-
             elif msg_type in ('file', 'image'):
-                # ── كشف تلقائي: هل هذا الملف صورة؟ ──
                 ext = _os.path.splitext(m.audio_file.name)[1].lower()
                 if ext in IMAGE_EXTENSIONS or msg_type == 'image':
-                    # تصحيح msg_type إذا كان مخزناً كـ 'file' لكنه في الواقع صورة
                     msg_data["msg_type"]   = 'image'
                     msg_data["image_url"]  = file_url
-                # إذا لم يكن صورة يبقى كـ file مع audio_url فقط
 
         messages.append(msg_data)
 
@@ -379,19 +372,15 @@ def add_message(request, rcp_id):
         return Response({"error": "La réunion est fermée"}, status=403)
 
     audio_file  = request.FILES.get('audio')
-    image_file  = request.FILES.get('image')   # 🖼️ champ dédié image
+    image_file  = request.FILES.get('image')
     file_attach = request.FILES.get('file')
 
-    # ── امتدادات الصور المدعومة ──
     IMAGE_EXTENSIONS = {'.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp', '.svg', '.tiff', '.tif', '.heic', '.avif'}
     IMAGE_MIME_TYPES  = {'image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/bmp',
                          'image/svg+xml', 'image/tiff', 'image/heic', 'image/avif'}
 
     sender_name = f"{request.user.prenom} {request.user.nom}".strip()
 
-    # ─────────────────────────────────────────
-    # 🎤 MESSAGE VOCAL
-    # ─────────────────────────────────────────
     if audio_file:
         duration = 0
         try:
@@ -419,15 +408,11 @@ def add_message(request, rcp_id):
             "date":      msg.created_at.strftime("%d/%m/%Y"),
         }
         notif_msg = f"🎤 Message vocal de {sender_name}"
-
         for participant in rcp.participants.select_related('user'):
             if participant.user != request.user:
                 Notification.objects.create(user=participant.user, rcp_meeting=rcp, message=notif_msg)
         return Response(resp, status=201)
 
-    # ─────────────────────────────────────────
-    # 🖼️ IMAGE — champ 'image' dédié (frontend envoie FormData avec image=...)
-    # ─────────────────────────────────────────
     elif image_file:
         ext  = _os.path.splitext(image_file.name)[1].lower() or '.jpg'
         msg  = RcpDiscussion.objects.create(
@@ -443,8 +428,8 @@ def add_message(request, rcp_id):
             "user_id":   request.user.id,
             "message":   image_file.name,
             "msg_type":  'image',
-            "image_url": file_url,   # ← champ dédié utilisé par le frontend
-            "audio_url": file_url,   # ← compatibilité
+            "image_url": file_url,
+            "audio_url": file_url,
             "time":      msg.created_at.strftime("%H:%M"),
             "date":      msg.created_at.strftime("%d/%m/%Y"),
         }
@@ -454,10 +439,6 @@ def add_message(request, rcp_id):
                 Notification.objects.create(user=participant.user, rcp_meeting=rcp, message=notif_msg)
         return Response(resp, status=201)
 
-    # ─────────────────────────────────────────
-    # 📎 FICHIER — champ 'file' générique
-    #    Détection automatique : si c'est une image → msg_type='image'
-    # ─────────────────────────────────────────
     elif file_attach:
         ext      = _os.path.splitext(file_attach.name)[1].lower()
         mime     = (file_attach.content_type or '').lower()
@@ -483,7 +464,7 @@ def add_message(request, rcp_id):
             "date":      msg.created_at.strftime("%d/%m/%Y"),
         }
         if is_image:
-            resp["image_url"] = file_url  # ← champ dédié pour les images
+            resp["image_url"] = file_url
 
         notif_msg = (f"🖼️ {sender_name} a partagé une image"
                      if is_image else
@@ -493,9 +474,6 @@ def add_message(request, rcp_id):
                 Notification.objects.create(user=participant.user, rcp_meeting=rcp, message=notif_msg)
         return Response(resp, status=201)
 
-    # ─────────────────────────────────────────
-    # 💬 MESSAGE TEXTE
-    # ─────────────────────────────────────────
     else:
         text = request.data.get('message', '').strip()
         if not text:
@@ -515,7 +493,6 @@ def add_message(request, rcp_id):
             "date":     msg.created_at.strftime("%d/%m/%Y"),
         }
         notif_msg = f"💬 {sender_name}: {text[:60]}"
-
         for participant in rcp.participants.select_related('user'):
             if participant.user != request.user:
                 Notification.objects.create(user=participant.user, rcp_meeting=rcp, message=notif_msg)
@@ -523,7 +500,7 @@ def add_message(request, rcp_id):
 
 
 # ══════════════════════════════════════════════
-# 🟢 SET VOTE PROPOSAL (créateur)
+# 🟢 SET VOTE PROPOSAL
 # ══════════════════════════════════════════════
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
@@ -580,7 +557,7 @@ def set_vote_proposal(request, rcp_id):
 
 
 # ══════════════════════════════════════════════
-# 🟢 ADD PROPOSAL to open vote
+# 🟢 ADD PROPOSAL
 # ══════════════════════════════════════════════
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
@@ -610,7 +587,7 @@ def add_vote_proposal(request, rcp_id):
 
 
 # ══════════════════════════════════════════════
-# 🟢 CLOSE VOTE (créateur)
+# 🟢 CLOSE VOTE
 # ══════════════════════════════════════════════
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
@@ -634,7 +611,7 @@ def close_vote(request, rcp_id):
 
 
 # ══════════════════════════════════════════════
-# 🟢 VOTE (participant)
+# 🟢 VOTE
 # ══════════════════════════════════════════════
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
@@ -824,12 +801,13 @@ def mark_notification_read(request, notif_id):
 
 
 # ══════════════════════════════════════════════
-# 📹 START VIDEO CALL
+# 📹 START VIDEO CALL — Whereby
 # ══════════════════════════════════════════════
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def start_video(request, rcp_id):
-    import re
+    import requests as req
+
     rcp = get_object_or_404(RcpMeeting, id=rcp_id)
 
     if rcp.created_by != request.user:
@@ -837,11 +815,28 @@ def start_video(request, rcp_id):
     if rcp.status != 'ongoing':
         return Response({'error': 'La RCP doit être en cours'}, status=400)
 
-    slug = re.sub(r'[^a-zA-Z0-9]', '', rcp.cancer.patient.full_name.replace(' ', ''))[:20]
-    room = f"RCP-{slug}-{rcp.id}"
+    WHEREBY_API_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJodHRwczovL2FjY291bnRzLmFwcGVhci5pbiIsImF1ZCI6Imh0dHBzOi8vYXBpLmFwcGVhci5pbi92MSIsImV4cCI6OTAwNzE5OTI1NDc0MDk5MSwiaWF0IjoxNzc4ODgwNzIzLCJvcmdhbml6YXRpb25JZCI6MzQwNDU4LCJqdGkiOiIzZTQwZGMwMy1hYjY1LTRiMGQtOGZhMC1lZTM2ODQwYmUwZjQifQ.X0Ep5VdWqxhBy9r79V56Xm_d7nEwHZakgHNOfR8EQUU"
+
+    response = req.post(
+        "https://api.whereby.dev/v1/meetings",
+        headers={
+            "Authorization": f"Bearer {WHEREBY_API_KEY}",
+            "Content-Type": "application/json",
+        },
+        json={
+            "endDate": "2099-12-31T00:00:00.000Z",
+            "fields": ["hostRoomUrl"],
+        }
+    )
+
+    if response.status_code not in [200, 201]:
+        return Response({'error': 'Erreur création salle vidéo'}, status=500)
+
+    data     = response.json()
+    room_url = data.get("roomUrl")
 
     rcp.video_call_active = True
-    rcp.video_call_room   = room
+    rcp.video_call_room   = room_url
     rcp.save(update_fields=['video_call_active', 'video_call_room'])
 
     for participant in rcp.participants.select_related('user'):
@@ -852,7 +847,7 @@ def start_video(request, rcp_id):
                 message=f"📹 Vidéo-conférence démarrée pour {rcp.cancer.patient.full_name} — cliquez pour rejoindre"
             )
 
-    return Response({'room': room, 'video_call_active': True})
+    return Response({'room': room_url, 'video_call_active': True})
 
 
 # ══════════════════════════════════════════════
@@ -1044,3 +1039,4 @@ def _generate_rapport(rcp):
         ContentFile(buffer.getvalue()),
         save=True
     )
+
