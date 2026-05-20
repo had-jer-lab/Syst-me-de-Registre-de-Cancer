@@ -10,8 +10,22 @@ from .models import (
     CancerStatusHistory, Death,
     RiskFactor, PatientRiskFactor,
     Habit, PatientHabit, Consultation,
-    DuplicateCase,
+    DuplicateCase, DemandeExamen,
 )
+
+
+class OptionalDateField(serializers.DateField):
+    def to_internal_value(self, data):
+        if data in ('', None):
+            return None
+        return super().to_internal_value(data)
+
+
+class OptionalIntegerField(serializers.IntegerField):
+    def to_internal_value(self, data):
+        if data in ('', None):
+            return None
+        return super().to_internal_value(data)
 
 
 # ─── Géographie ──────────────────────────────────────────────────────────────
@@ -83,6 +97,26 @@ class TreatmentSerializer(serializers.ModelSerializer):
 
 
 class TreatmentCreateSerializer(serializers.ModelSerializer):
+    cancer = serializers.PrimaryKeyRelatedField(read_only=True)
+    intention = serializers.ChoiceField(
+        choices=Treatment.INTENTION_CHOICES,
+        required=False,
+        allow_blank=True,
+    )
+    statut = serializers.ChoiceField(
+        choices=Treatment.STATUT_CHOICES,
+        required=False,
+    )
+    ligne = serializers.CharField(required=False, allow_blank=True)
+    date_debut = OptionalDateField(required=False, allow_null=True)
+    date_fin = OptionalDateField(required=False, allow_null=True)
+    date_evaluation = OptionalDateField(required=False, allow_null=True)
+    cycles_prevus = OptionalIntegerField(required=False, allow_null=True)
+    cycles_realises = OptionalIntegerField(required=False, allow_null=True)
+    jours_administration = serializers.ListField(
+        child=serializers.CharField(), required=False, allow_empty=True
+    )
+
     class Meta:
         model  = Treatment
         fields = [
@@ -306,6 +340,14 @@ class PatientListSerializer(serializers.ModelSerializer):
         }
 
 
+# ─── Death ────────────────────────────────────────────────────────────────────
+
+class DeathSerializer(serializers.ModelSerializer):
+    class Meta:
+        model  = Death
+        fields = ['id', 'patient', 'date_death', 'cause_principale']
+
+
 # ─── Patient détail (complet) ─────────────────────────────────────────────────
 
 class PatientDetailSerializer(serializers.ModelSerializer):
@@ -319,6 +361,7 @@ class PatientDetailSerializer(serializers.ModelSerializer):
     consultations = ConsultationSerializer(many=True, read_only=True)
     habits        = serializers.SerializerMethodField()
     risk_factors  = serializers.SerializerMethodField()
+    death         = DeathSerializer(read_only=True)
 
     class Meta:
         model  = Patient
@@ -331,6 +374,7 @@ class PatientDetailSerializer(serializers.ModelSerializer):
             'created_by', 'medecin_nom',
             'is_merged', 'merged_into_patient',
             'data_source', 'created_at', 'updated_at',
+            'death',
             'cancers', 'consultations',
             'habits', 'risk_factors',
         ]
@@ -391,11 +435,6 @@ class DeathSerializer(serializers.ModelSerializer):
 
 
 
-
-
-# ─── À ajouter dans patients/serializers.py ──────────────────────────────────
-
-from .models import DemandeExamen   # ajouter à l'import existant
 
 
 class DemandeExamenSerializer(serializers.ModelSerializer):

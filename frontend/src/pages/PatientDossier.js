@@ -42,6 +42,73 @@ function daysSince(dateStr) {
   return Math.floor((new Date() - new Date(dateStr)) / 86400000);
 }
 
+function formatCancerStatus(status) {
+  if (!status) return '—';
+  const text = String(status).trim();
+  return text || '—';
+}
+
+function computePatientOutcome(patient) {
+  if (patient.death) {
+    return {
+      label: 'Décédé',
+      value: patient.death.cause_principale
+        ? `${fmtDate(patient.death.date_death)} · ${patient.death.cause_principale}`
+        : fmtDate(patient.death.date_death),
+      color: '#dc2626',
+    };
+  }
+
+  const statusEntries = (patient.cancers || []).flatMap(cancer =>
+    (cancer.status_history || []).map(entry => ({
+      ...entry,
+      cancer_type_name: cancer.cancer_type_name || cancer.cancer_type?.name || 'Cancer',
+    }))
+  );
+
+  statusEntries.sort((a, b) => (a.status_date || '').localeCompare(b.status_date || ''));
+  const latest = statusEntries[statusEntries.length - 1];
+  const latestStatus = latest ? String(latest.status || '').toLowerCase() : '';
+
+  if ((patient.cancers || []).some(c => c.recidive)) {
+    return {
+      label: 'Récidive',
+      value: latest ? `${formatCancerStatus(latest.status)} · ${fmtDate(latest.status_date)}` : 'Récidive documentée',
+      color: '#d97706',
+    };
+  }
+
+  if (latestStatus.match(/gu[eé]ri|r[ée]mission|rc|complet|complet/)) {
+    return {
+      label: 'Guéri',
+      value: latest ? `${formatCancerStatus(latest.status)} · ${fmtDate(latest.status_date)}` : 'Guéri',
+      color: '#059669',
+    };
+  }
+
+  if (latestStatus.match(/progress|en cours|stable|évolu|reprise|rechute|récid/)) {
+    return {
+      label: 'En traitement / Suivi',
+      value: latest ? `${formatCancerStatus(latest.status)} · ${fmtDate(latest.status_date)}` : 'En suivi actif',
+      color: '#4A6CF7',
+    };
+  }
+
+  if (latest) {
+    return {
+      label: 'Statut récent',
+      value: `${formatCancerStatus(latest.status)} · ${fmtDate(latest.status_date)}`,
+      color: '#4A6CF7',
+    };
+  }
+
+  return {
+    label: 'Sans données',
+    value: 'Aucun statut tumoral enregistré',
+    color: '#64748B',
+  };
+}
+
 function RdvPill({ date }) {
   if (!date || date === '—') return <span style={s.rdvNone}>Aucun RDV</span>;
   const d = daysSince(date);
@@ -66,6 +133,40 @@ function StadeBadge({ stade }) {
   const c = colors[stade] || { color: '#6b7280', bg: '#f3f4f6' };
   return <span style={{ ...s.stadeBadge, color: c.color, background: c.bg }}>Stade {stade}</span>;
 }
+
+const TREATMENT_TYPES = [
+  { id:'chimio', label:'Chimiothérapie' },
+  { id:'radio', label:'Radiothérapie' },
+  { id:'chirurgie', label:'Chirurgie' },
+  { id:'hormono', label:'Hormonothérapie' },
+  { id:'immuno', label:'Immunothérapie' },
+  { id:'targeted', label:'Thérapie ciblée' },
+];
+const TREATMENT_INTENTIONS = [
+  { value:'curatif', label:'Curatif' },
+  { value:'adjuvant', label:'Adjuvant' },
+  { value:'neo_adjuvant', label:'Néo-adjuvant' },
+  { value:'palliatif', label:'Palliatif' },
+  { value:'prophylactique', label:'Prophylactique' },
+];
+const TREATMENT_STATUTS = [
+  { value:'planifie', label:'Planifié' },
+  { value:'en_cours', label:'En cours' },
+  { value:'termine', label:'Terminé' },
+  { value:'pause', label:'Pause' },
+  { value:'suspendu', label:'Suspendu' },
+  { value:'abandonne', label:'Abandonné' },
+];
+const TREATMENT_VOIES = ['IV (intraveineux)','PO (oral)','SC (sous-cutané)','IM (intramusculaire)','Topique','Intra-thécale','Intra-artérielle','Autre'];
+const TREATMENT_JOURS = ['J1','J2','J3','J5','J7','J8','J14','J15','J21','J28'];
+const TREATMENT_RESPONSES = [
+  { value:'RC', label:'RC — Rémission complète' },
+  { value:'RP', label:'RP — Rémission partielle' },
+  { value:'SD', label:'SD — Stabilisation' },
+  { value:'PD', label:'PD — Progression' },
+  { value:'NE', label:'NE — Non évaluable' },
+];
+const TREATMENT_TOXICITIES = ['Grade 0','Grade 1 — Léger','Grade 2 — Modéré','Grade 3 — Sévère','Grade 4 — Vital','Grade 5 — Décès'];
 
 function SexeAvatar({ sexe, name }) {
   const initials = name?.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase() || '??';
@@ -147,7 +248,7 @@ function FormSubmissionsSection({ patientId }) {
   );
 }
 
-function CancerCard({ cancer, index, patientId }) {
+function CancerCard({ cancer, index, patientId, onAddTreatment }) {
   const [open, setOpen] = useState(index === 0);
   const type = cancer.cancer_type_name || '—';
   const stade = cancer.stade_clinique || cancer.stade_pathologique || '—';
@@ -173,6 +274,9 @@ function CancerCard({ cancer, index, patientId }) {
 
       {open && (
         <div style={s.cancerBody}>
+          <div style={s.cancerActions}>
+            <button style={s.cancerActionBtn} onClick={() => onAddTreatment?.(cancer.id)}>➕ Ajouter un traitement</button>
+          </div>
           <div style={s.cancerGrid}>
             <InfoRow label="Type" value={type} />
             <InfoRow label="Stade clinique" value={cancer.stade_clinique} />
@@ -180,6 +284,35 @@ function CancerCard({ cancer, index, patientId }) {
             <InfoRow label="TNM" value={cancer.tnm} accent />
             <InfoRow label="Grade" value={cancer.grade} />
             <InfoRow label="Date diagnostic" value={fmtDate(cancer.date_diagnostic)} />
+          </div>
+
+          <Divider />
+          <div style={s.subSectionTitle}>🩺 Détails du diagnostic</div>
+          <div style={s.cancerGrid}>
+            <InfoRow label="Type de tumeur" value={cancer.type_tumeur || '—'} />
+            <InfoRow label="Sous-type" value={cancer.sous_type || '—'} />
+            <InfoRow label="CIM10" value={cancer.cim10_code || '—'} />
+            <InfoRow label="Service diagnostique" value={cancer.service_diag || '—'} />
+            <InfoRow label="Médecin diagnostique" value={cancer.medecin_diag || '—'} />
+            <InfoRow label="Établissement" value={cancer.etablissement_diag || '—'} />
+          </div>
+
+          <Divider />
+          <div style={s.subSectionTitle}>📊 Statut tumoral</div>
+          <div style={s.cancerGrid}>
+            <InfoRow label="Localisé" value={cancer.localise ? 'Oui' : 'Non'} />
+            <InfoRow label="Métastatique" value={cancer.metastatique ? 'Oui' : 'Non'} />
+            <InfoRow label="Récidive" value={cancer.recidive ? 'Oui' : 'Non'} />
+            <InfoRow label="Sites métastatiques" value={(cancer.sites_metastatiques || []).join(', ') || '—'} />
+            <InfoRow label="Récepteurs ER" value={cancer.recepteur_er || '—'} />
+            <InfoRow label="Récepteurs PR" value={cancer.recepteur_pr || '—'} />
+          </div>
+          <div style={s.cancerGrid}>
+            <InfoRow label="HER2" value={cancer.her2 || '—'} />
+            <InfoRow label="Triple négatif" value={cancer.triple_negatif ? 'Oui' : 'Non'} />
+            <InfoRow label="Taille tumorale" value={cancer.taille_tumorale ? `${cancer.taille_tumorale} cm` : '—'} />
+            <InfoRow label="Ganglions envahis" value={cancer.ganglions_envahis ?? '—'} />
+            <InfoRow label="Base diagnostic" value={(Array.isArray(cancer.base_diagnostic) ? cancer.base_diagnostic.join(', ') : cancer.base_diagnostic) || '—'} />
           </div>
 
           {cancer.histology && (
@@ -197,6 +330,21 @@ function CancerCard({ cancer, index, patientId }) {
             </>
           )}
 
+          {(cancer.status_history?.length || 0) > 0 && (
+            <>
+              <Divider />
+              <div style={s.subSectionTitle}>📈 Suivi du statut tumoral</div>
+              <div style={s.statusTimeline}>
+                {(cancer.status_history || []).slice().sort((a, b) => (a.status_date || '').localeCompare(b.status_date || '')).map((status, idx) => (
+                  <div key={idx} style={s.statusItem}>
+                    <div style={s.statusDate}>{fmtDate(status.status_date)}</div>
+                    <div style={s.statusText}>{status.status}</div>
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
+
           {cancer.treatments?.length > 0 && (
             <>
               <Divider />
@@ -204,12 +352,32 @@ function CancerCard({ cancer, index, patientId }) {
               <div style={s.treatmentList}>
                 {cancer.treatments.map((t, i) => (
                   <div key={i} style={s.treatmentItem}>
-                    <div style={s.treatmentType}>{t.type_traitement}</div>
-                    {t.protocole && <div style={s.treatmentProto}>{t.protocole}</div>}
-                    <div style={s.treatmentDates}>
-                      {t.date_debut && <span>Du {fmtDate(t.date_debut)}</span>}
-                      {t.date_fin && <span> au {fmtDate(t.date_fin)}</span>}
+                    <div style={s.treatmentHeader}>
+                      <div style={s.treatmentType}>{t.type_traitement_display || t.type_traitement}</div>
+                      <div style={s.treatmentMeta}>
+                        {t.intention_display || '—'} · {t.statut_display || '—'}{t.ligne ? ` · ${t.ligne}` : ''}
+                      </div>
                     </div>
+                    {t.protocole && <div style={s.treatmentProto}>{t.protocole}</div>}
+                    {t.medicaments && <div style={s.treatmentDetail}><strong>Médicaments:</strong> {t.medicaments}</div>}
+                    {(t.voie_administration || (t.jours_administration?.length || 0) > 0) && (
+                      <div style={s.treatmentDetail}>
+                        {t.voie_administration && <span>Voie: {t.voie_administration}</span>}
+                        {t.jours_administration?.length > 0 && <span style={s.detailSeparator}>Jours: {t.jours_administration.join(', ')}</span>}
+                      </div>
+                    )}
+                    {(t.cycles_prevus || t.cycles_realises) && (
+                      <div style={s.treatmentDetail}>Cycles: {t.cycles_realises || '0'} / {t.cycles_prevus || '—'}</div>
+                    )}
+                    {(t.date_debut || t.date_fin) && (
+                      <div style={s.treatmentDates}>Du {fmtDate(t.date_debut)}{t.date_fin ? ` au ${fmtDate(t.date_fin)}` : ''}</div>
+                    )}
+                    {(t.reponse_display || t.grade_toxicite) && (
+                      <div style={s.treatmentDetail}>
+                        <strong>Réponse:</strong> {t.reponse_display || '—'}{t.grade_toxicite ? ` · Toxicité: ${t.grade_toxicite}` : ''}
+                      </div>
+                    )}
+                    {t.description_toxicite && <div style={s.treatmentDetail}><strong>Toxicité:</strong> {t.description_toxicite}</div>}
                   </div>
                 ))}
               </div>
@@ -340,6 +508,116 @@ function AddConsultationModal({ patientId, onClose, onSaved }) {
   );
 }
 
+function AddTreatmentModal({ patientId, cancerId, form, onChange, onClose, onSubmit, loading, error }) {
+  return (
+    <div style={s.modalBackdrop} onClick={e => e.target === e.currentTarget && onClose()}>
+      <div style={s.modalLarge}>
+        <div style={s.modalHeader}>
+          <span style={s.modalTitle}>➕ Ajouter un traitement</span>
+          <button style={s.modalClose} onClick={onClose}>✕</button>
+        </div>
+        <div style={s.modalBody}>
+          {error && <div style={s.modalError}>{error}</div>}
+          <div style={s.modalFieldRow}>
+            <div style={s.modalFieldHalf}>
+              <label style={s.modalLabel}>Type de traitement</label>
+              <select style={s.modalInput} value={form.type_traitement} onChange={e => onChange('type_traitement', e.target.value)}>
+                {TREATMENT_TYPES.map(t => <option key={t.id} value={t.id}>{t.label}</option>)}
+              </select>
+            </div>
+            <div style={s.modalFieldHalf}>
+              <label style={s.modalLabel}>Intention</label>
+              <select style={s.modalInput} value={form.intention} onChange={e => onChange('intention', e.target.value)}>
+                <option value="">—</option>
+                {TREATMENT_INTENTIONS.map(i => <option key={i.value} value={i.value}>{i.label}</option>)}
+              </select>
+            </div>
+          </div>
+          <div style={s.modalFieldRow}>
+            <div style={s.modalFieldHalf}>
+              <label style={s.modalLabel}>Statut</label>
+              <select style={s.modalInput} value={form.statut} onChange={e => onChange('statut', e.target.value)}>
+                {TREATMENT_STATUTS.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
+              </select>
+            </div>
+            <div style={s.modalFieldHalf}>
+              <label style={s.modalLabel}>Ligne de traitement</label>
+              <input style={s.modalInput} type="text" value={form.ligne} onChange={e => onChange('ligne', e.target.value)} placeholder="ex: 1ère ligne" />
+            </div>
+          </div>
+          <div style={s.modalField}>
+            <label style={s.modalLabel}>Protocole</label>
+            <input style={s.modalInput} type="text" value={form.protocole} onChange={e => onChange('protocole', e.target.value)} placeholder="ex: FOLFOX" />
+          </div>
+          <div style={s.modalField}>
+            <label style={s.modalLabel}>Médicaments</label>
+            <input style={s.modalInput} type="text" value={form.medicaments} onChange={e => onChange('medicaments', e.target.value)} placeholder="ex: Doxorubicine, Cyclophosphamide" />
+          </div>
+          <div style={s.modalFieldRow}>
+            <div style={s.modalFieldHalf}>
+              <label style={s.modalLabel}>Voie d'administration</label>
+              <select style={s.modalInput} value={form.voie_administration} onChange={e => onChange('voie_administration', e.target.value)}>
+                <option value="">—</option>
+                {TREATMENT_VOIES.map(v => <option key={v} value={v}>{v}</option>)}
+              </select>
+            </div>
+            <div style={s.modalFieldHalf}>
+              <label style={s.modalLabel}>Jours d'administration</label>
+              <input style={s.modalInput} type="text" value={(Array.isArray(form.jours_administration) ? form.jours_administration.join(', ') : form.jours_administration)} onChange={e => onChange('jours_administration', e.target.value)} placeholder="ex: J1, J8, J15" />
+            </div>
+          </div>
+          <div style={s.modalFieldRow}>
+            <div style={s.modalFieldHalf}>
+              <label style={s.modalLabel}>Date de début</label>
+              <input style={s.modalInput} type="date" value={form.date_debut} onChange={e => onChange('date_debut', e.target.value)} />
+            </div>
+            <div style={s.modalFieldHalf}>
+              <label style={s.modalLabel}>Date de fin</label>
+              <input style={s.modalInput} type="date" value={form.date_fin} onChange={e => onChange('date_fin', e.target.value)} />
+            </div>
+          </div>
+          <div style={s.modalFieldRow}>
+            <div style={s.modalFieldHalf}>
+              <label style={s.modalLabel}>Cycles prévus</label>
+              <input style={s.modalInput} type="number" min="0" value={form.cycles_prevus} onChange={e => onChange('cycles_prevus', e.target.value)} />
+            </div>
+            <div style={s.modalFieldHalf}>
+              <label style={s.modalLabel}>Cycles réalisés</label>
+              <input style={s.modalInput} type="number" min="0" value={form.cycles_realises} onChange={e => onChange('cycles_realises', e.target.value)} />
+            </div>
+          </div>
+          <div style={s.modalFieldRow}>
+            <div style={s.modalFieldHalf}>
+              <label style={s.modalLabel}>Réponse tumorale</label>
+              <select style={s.modalInput} value={form.reponse_tumorale} onChange={e => onChange('reponse_tumorale', e.target.value)}>
+                <option value="">—</option>
+                {TREATMENT_RESPONSES.map(r => <option key={r.value} value={r.value}>{r.label}</option>)}
+              </select>
+            </div>
+            <div style={s.modalFieldHalf}>
+              <label style={s.modalLabel}>Grade de toxicité</label>
+              <select style={s.modalInput} value={form.grade_toxicite} onChange={e => onChange('grade_toxicite', e.target.value)}>
+                <option value="">—</option>
+                {TREATMENT_TOXICITIES.map(g => <option key={g} value={g}>{g}</option>)}
+              </select>
+            </div>
+          </div>
+          <div style={s.modalField}>
+            <label style={s.modalLabel}>Description toxicité</label>
+            <textarea style={{ ...s.modalInput, minHeight: 84 }} value={form.description_toxicite} onChange={e => onChange('description_toxicite', e.target.value)} />
+          </div>
+        </div>
+        <div style={s.modalFooter}>
+          <button style={s.btnGhost} onClick={onClose}>Annuler</button>
+          <button style={{ ...s.btnPrimary, opacity: loading ? 0.7 : 1 }} onClick={onSubmit} disabled={loading}>
+            {loading ? 'Enregistrement…' : '✓ Valider'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function PatientDossier() {
   const navigate = useNavigate();
   const { id } = useParams();
@@ -348,6 +626,16 @@ export default function PatientDossier() {
   const [error, setError] = useState('');
   const [activeTab, setActiveTab] = useState('apercu');
   const [showConsultModal, setShowConsultModal] = useState(false);
+  const [showTreatmentModal, setShowTreatmentModal] = useState(false);
+  const [activeCancerId, setActiveCancerId] = useState(null);
+  const [treatmentForm, setTreatmentForm] = useState({
+    type_traitement: 'chimio', intention: '', statut: 'planifie', ligne: '',
+    protocole: '', medicaments: '', voie_administration: '', jours_administration: [],
+    cycles_prevus: '', cycles_realises: '', date_debut: '', date_fin: '',
+    reponse_tumorale: '', date_evaluation: '', grade_toxicite: '', description_toxicite: '',
+  });
+  const [treatmentError, setTreatmentError] = useState('');
+  const [treatmentLoading, setTreatmentLoading] = useState(false);
   const [showQR, setShowQR] = useState(false);
   const [toast, setToast] = useState('');
 
@@ -365,6 +653,49 @@ export default function PatientDossier() {
   }, [id, navigate]);
 
   useEffect(() => { load(); }, [load]);
+
+  const resetTreatmentForm = () => setTreatmentForm({
+    type_traitement: 'chimio', intention: '', statut: 'planifie', ligne: '',
+    protocole: '', medicaments: '', voie_administration: '', jours_administration: [],
+    cycles_prevus: '', cycles_realises: '', date_debut: '', date_fin: '',
+    reponse_tumorale: '', date_evaluation: '', grade_toxicite: '', description_toxicite: '',
+  });
+
+  const openTreatmentModal = (cancerId) => {
+    setActiveCancerId(cancerId);
+    resetTreatmentForm();
+    setTreatmentError('');
+    setShowTreatmentModal(true);
+  };
+
+  const updateTreatmentValue = (key, value) => {
+    setTreatmentForm(prev => ({ ...prev, [key]: value }));
+  };
+
+  const submitTreatment = async () => {
+    if (!activeCancerId) return;
+    setTreatmentLoading(true);
+    setTreatmentError('');
+    try {
+      const payload = {
+        ...treatmentForm,
+        jours_administration: Array.isArray(treatmentForm.jours_administration)
+          ? treatmentForm.jours_administration
+          : String(treatmentForm.jours_administration || '').split(',').map(v => v.trim()).filter(Boolean),
+      };
+      await apiFetch(`/patients/${id}/cancers/${activeCancerId}/treatments/`, {
+        method: 'POST', body: JSON.stringify(payload),
+      });
+      setShowTreatmentModal(false);
+      showToastMsg('Traitement ajouté avec succès.');
+      load();
+    } catch (err) {
+      console.error('Erreur ajout traitement:', err);
+      setTreatmentError('Impossible d\u2019ajouter le traitement.');
+    } finally {
+      setTreatmentLoading(false);
+    }
+  };
 
   const showToastMsg = (msg) => { setToast(msg); setTimeout(() => setToast(''), 3000); };
 
@@ -400,6 +731,19 @@ export default function PatientDossier() {
 
       {showConsultModal && (
         <AddConsultationModal patientId={id} onClose={() => setShowConsultModal(false)} onSaved={() => { setShowConsultModal(false); load(); showToastMsg('✓ Consultation enregistrée'); }} />
+      )}
+
+      {showTreatmentModal && (
+        <AddTreatmentModal
+          patientId={id}
+          cancerId={activeCancerId}
+          form={treatmentForm}
+          onChange={updateTreatmentValue}
+          onClose={() => setShowTreatmentModal(false)}
+          onSubmit={submitTreatment}
+          loading={treatmentLoading}
+          error={treatmentError}
+        />
       )}
 
       {showQR && (
@@ -520,6 +864,19 @@ export default function PatientDossier() {
                 <InfoRow label="Médecin" value={patient.medecin_nom} />
               </SectionCard>
 
+              <SectionCard title="Statut clinique" icon="📌">
+                {(() => {
+                  const status = computePatientOutcome(patient);
+                  return (
+                    <>
+                      <InfoRow label="État actuel" value={<span style={{ color: status.color, fontWeight: 800 }}>{status.label}</span>} />
+                      <InfoRow label="Dernière évolution" value={status.value} />
+                      <InfoRow label="Cancers suivis" value={(patient.cancers || []).length || 0} />
+                    </>
+                  );
+                })()}
+              </SectionCard>
+
               <SectionCard title="Habitudes de vie" icon="🌿">
                 {patient.habits?.length > 0 ? (patient.habits.map((h, i) => (
                   <div key={i} style={s.habitRow}><div style={s.habitName}>{h.name}</div><div style={s.habitMeta}>{h.frequency || 'Fréquence inconnue'} · {h.duration_years ? `${h.duration_years} ans` : 'Durée inconnue'}</div></div>
@@ -560,7 +917,7 @@ export default function PatientDossier() {
         )}
 
         {activeTab === 'cancers' && (
-          <div>{patient.cancers?.length === 0 ? <EmptyState icon="🎗" text="Aucun cancer enregistré pour ce patient." /> : patient.cancers.map((cancer, i) => <CancerCard key={cancer.id} cancer={cancer} index={i} patientId={id} />)}</div>
+          <div>{patient.cancers?.length === 0 ? <EmptyState icon="🎗" text="Aucun cancer enregistré pour ce patient." /> : patient.cancers.map((cancer, i) => <CancerCard key={cancer.id} cancer={cancer} index={i} patientId={id} onAddTreatment={openTreatmentModal} />)}</div>
         )}
 
         {activeTab === 'consultations' && (
@@ -645,11 +1002,21 @@ const s = {
   cancerCardRight: { display: 'flex', alignItems: 'center', gap: 10 },
   chevron: { color: '#7A8BAD', fontSize: 10 },
   cancerBody: { padding: '16px 20px', borderTop: '1px solid #F0F4FF' },
+  cancerActions: { display: 'flex', justifyContent: 'flex-end', marginBottom: 14 },
+  cancerActionBtn: { padding: '8px 14px', borderRadius: 10, border: '1px solid #DDE4F3', background: '#F5F8FF', color: '#334155', fontSize: 12, fontWeight: 700, cursor: 'pointer' },
   cancerGrid: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '2px 20px' },
   treatmentList: { display: 'flex', flexDirection: 'column', gap: 8 },
+  treatmentHeader: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, marginBottom: 8, flexWrap: 'wrap' },
+  treatmentMeta: { fontSize: 12, color: '#64748B', fontWeight: 600 },
+  treatmentDetail: { fontSize: 12, color: '#475569', marginTop: 6, lineHeight: 1.5 },
+  detailSeparator: { marginLeft: 12 },
   treatmentItem: { padding: '10px 14px', borderRadius: 8, background: '#F5F8FF', border: '1px solid #E8EDF5' },
   treatmentType: { fontSize: 13, fontWeight: 800, color: '#1A2B4A' },
   treatmentProto: { fontSize: 12, color: '#7A8BAD' },
+  statusTimeline: { display: 'grid', gap: 10 },
+  statusItem: { display: 'grid', gridTemplateColumns: '120px 1fr', gap: 12, alignItems: 'center', padding: '10px 14px', borderRadius: 10, background: '#F8FAFC', border: '1px solid #E2E8F0' },
+  statusDate: { fontSize: 12, fontWeight: 700, color: '#475569' },
+  statusText: { fontSize: 13, color: '#1F2937', fontWeight: 700 },
   treatmentDates: { fontSize: 11, color: '#7A8BAD' },
   examTable: { borderRadius: 8, overflow: 'hidden', border: '1px solid #E8EDF5' },
   examTableHeader: { display: 'grid', gridTemplateColumns: '1fr 1fr auto', background: '#F5F8FF', padding: '8px 14px', fontSize: 10.5, fontWeight: 800, color: '#7A8BAD' },
@@ -689,12 +1056,15 @@ const s = {
   timelineMedecin: { fontSize: 11, color: '#7A8BAD', fontWeight: 600 },
   modalBackdrop: { position: 'fixed', inset: 0, background: 'rgba(10,20,50,0.45)', backdropFilter: 'blur(6px)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 },
   modal: { background: '#fff', borderRadius: 20, width: '100%', maxWidth: 520, boxShadow: '0 24px 60px rgba(0,0,0,0.18)', maxHeight: '90vh', display: 'flex', flexDirection: 'column' },
+  modalLarge: { background: '#fff', borderRadius: 20, width: '100%', maxWidth: 720, boxShadow: '0 24px 60px rgba(0,0,0,0.18)', maxHeight: '90vh', display: 'flex', flexDirection: 'column' },
   modalHeader: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '18px 22px', borderBottom: '1px solid #F0F4FF' },
   modalTitle: { fontFamily: "'Poppins', sans-serif", fontWeight: 700, fontSize: 16, color: '#1A2B4A' },
   modalClose: { width: 30, height: 30, borderRadius: 8, border: '1px solid #DDE4F3', background: '#F5F8FF', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' },
   modalBody: { padding: '20px 22px', overflowY: 'auto', flex: 1 },
   modalError: { background: '#FFF5F5', border: '1px solid #FED7D7', borderRadius: 8, padding: '10px 14px', fontSize: 13, color: '#dc2626', fontWeight: 600, marginBottom: 14 },
   modalField: { marginBottom: 14 },
+  modalFieldRow: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, marginBottom: 14 },
+  modalFieldHalf: { display: 'flex', flexDirection: 'column' },
   modalLabel: { fontSize: 12, fontWeight: 700, color: '#7A8BAD', display: 'block', marginBottom: 5 },
   modalInput: { width: '100%', background: '#F5F8FF', border: '1.5px solid #DDE4F3', borderRadius: 10, padding: '10px 14px', fontSize: 13, color: '#1A2B4A' },
   modalFooter: { display: 'flex', gap: 10, padding: '16px 22px', borderTop: '1px solid #F0F4FF', justifyContent: 'flex-end' },

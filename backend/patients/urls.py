@@ -36,6 +36,10 @@ urlpatterns = [
          CancerListCreateView.as_view(),  name='patient-cancers'),
     path('<int:patient_pk>/cancers/<int:pk>/',
          CancerDetailView.as_view(),      name='patient-cancer-detail'),
+    path('<int:patient_pk>/cancers/<int:cancer_pk>/treatments/',
+         TreatmentListCreateView.as_view(), name='patient-cancer-treatments'),
+    path('<int:patient_pk>/cancers/<int:cancer_pk>/treatments/<int:pk>/',
+         TreatmentDetailView.as_view(), name='patient-cancer-treatment-detail'),
 
     # ── Consultations (nested sous patient) ───────────────────────────────────
     path('<int:patient_pk>/consultations/',

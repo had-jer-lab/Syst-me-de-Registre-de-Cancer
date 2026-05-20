@@ -156,7 +156,7 @@ class PatientDetailView(generics.RetrieveUpdateDestroyAPIView):
         user = self.request.user
         if user.is_staff or user.role == 'admin':
             return Patient.objects.select_related(
-                'commune__wilaya', 'hospital', 'created_by'
+                'commune__wilaya', 'hospital', 'created_by', 'death'
             ).prefetch_related(
                 'cancers__cancer_type',
                 'cancers__treatments',
@@ -168,7 +168,7 @@ class PatientDetailView(generics.RetrieveUpdateDestroyAPIView):
                 'consultations__user',
             ).all()
         return Patient.objects.select_related(
-            'commune__wilaya', 'hospital', 'created_by'
+            'commune__wilaya', 'hospital', 'created_by', 'death'
         ).prefetch_related(
             'cancers__cancer_type',
             'cancers__treatments',
@@ -177,6 +177,8 @@ class PatientDetailView(generics.RetrieveUpdateDestroyAPIView):
             'cancers__histology',
             'cancers__metastases',
             'cancers__follow_ups',
+            'cancers__status_history',
+            'cancers__status_history',
             'consultations__user',
         ).filter(created_by=user)
 
