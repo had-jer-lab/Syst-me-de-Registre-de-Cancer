@@ -4,7 +4,7 @@
 from django.urls import path
 from .views import (
     WilayaListView, CommuneListView, HospitalListView,
-    CancerTypeListView,
+    CancerTypeListView, CustomFieldListCreateView, CustomFieldDetailView,
     PatientListCreateView, PatientDetailView,
     PublicPatientView,
     DashboardStatsView,
@@ -22,6 +22,8 @@ urlpatterns = [
     path('communes/',      CommuneListView.as_view(),    name='communes'),
     path('hospitals/',     HospitalListView.as_view(),   name='hospitals'),
     path('cancer-types/',  CancerTypeListView.as_view(), name='cancer-types'),
+    path('custom-fields/', CustomFieldListCreateView.as_view(), name='custom-fields'),
+    path('custom-fields/<int:pk>/', CustomFieldDetailView.as_view(), name='custom-field-detail'),
 
     # ── Dashboard ─────────────────────────────────────────────────────────────
     path('stats/',         DashboardStatsView.as_view(), name='dashboard-stats'),

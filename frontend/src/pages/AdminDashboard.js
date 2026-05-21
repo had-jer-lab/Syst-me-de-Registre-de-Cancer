@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
+import CustomFieldsPage from './CustomFieldsPage';
 
 // ─── API Helper ───────────────────────────────────────────────────────────────
 const API = 'http://localhost:8000/api/auth';
@@ -580,9 +581,10 @@ export default function AdminDashboard() {
   }, []);
 
   const navItems = [
-    { id: 'overview', icon: '🏠', label: 'Vue d\'ensemble' },
-    { id: 'users',    icon: '👤', label: 'Mes utilisateurs' },
-    { id: 'logs',     icon: '📋', label: 'Journal' },
+    { id: 'overview',      icon: '🏠', label: 'Vue d\'ensemble' },
+    { id: 'users',         icon: '👤', label: 'Mes utilisateurs' },
+    { id: 'custom-fields', icon: '🎛️', label: 'Champs personnalisés' },
+    { id: 'logs',          icon: '📋', label: 'Journal' },
   ];
 
   const handleLogout = () => {
@@ -636,6 +638,7 @@ export default function AdminDashboard() {
             <div style={s.topbarTitle}>
               {page === 'overview' && 'Tableau de bord Admin'}
               {page === 'users'    && 'Gestion des utilisateurs'}
+              {page === 'custom-fields' && 'Champs personnalisés'}
               {page === 'logs'     && 'Journal d\'activité'}
             </div>
             <div style={s.topbarSub}>Registre National du Cancer — Panel Administrateur</div>
@@ -655,6 +658,7 @@ export default function AdminDashboard() {
 
         {page === 'overview' && <OverviewPage usersCount={usersCount} logsCount={logsCount} setPage={setPage} />}
         {page === 'users'    && <UsersPage search={search} />}
+        {page === 'custom-fields' && <CustomFieldsPage search={search} />}
         {page === 'logs'     && <LogsPage search={search} />}
       </div>
     </div>

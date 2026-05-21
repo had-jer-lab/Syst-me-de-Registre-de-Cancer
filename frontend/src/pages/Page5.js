@@ -393,6 +393,7 @@ export default function Page5() {
           tnm:             [data.tnmT, data.tnmN, data.tnmM].filter(Boolean).join(''),
           grade:           data.grade    || '',
           date_diagnostic: data.diagDate || null,
+          custom_fields:   data.customFields || {},
         };
 
         await fetch(`http://localhost:8000/api/patients/${patient.id}/cancers/`, {

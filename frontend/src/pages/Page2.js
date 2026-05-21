@@ -4,6 +4,7 @@ import { usePatient } from '../context/PatientContext';
 import Layout from '../components/Layout';
 import { PageHeader, BtnRow } from '../components/FormFields';
 import { MicButton } from '../components/MicButton';
+import CustomFieldsRenderer from '../components/CustomFieldsRenderer';
 
 /* ─── Données ─────────────────────────────────────────────────────────────── */
 
@@ -35,7 +36,6 @@ const SOUS_TYPES = {
   'Autre':                  ['Non spécifié'],
 };
 
-// Code 4: TNM étendu (T1a/T1b, M1a/M1b…) — plus complet que code 3
 const TNM_T = ['Tx','T0','Tis','T1','T1a','T1b','T2','T2a','T2b','T3','T4','T4a','T4b'];
 const TNM_N = ['Nx','N0','N1','N1a','N1b','N2','N2a','N2b','N2c','N3'];
 const TNM_M = ['Mx','M0','M1','M1a','M1b','M1c'];
@@ -67,7 +67,6 @@ const CIM10_LIST = [
   {code:'C81',label:'C81 — Hodgkin'},{code:'C91',label:'C91 — Leucémie lymphoïde'},
   {code:'C43',label:'C43 — Mélanome'},{code:'C71',label:'C71 — Cerveau'},
 ];
-
 
 /* ─── Composants UI ──────────────────────────────────────────────────────── */
 
@@ -117,46 +116,23 @@ function Input({ value, onChange, type = 'text', placeholder, unit }) {
   );
 }
 
-// Mic-wrapped input — from code 3 pattern
-function MicInput({ value, onChange, placeholder, storeKey, update }) {
+/* Elegant select with chevron icon */
+function Sel({ value, onChange, options, placeholder, icon }) {
   return (
-    <div style={{ display:'flex', gap:6, alignItems:'center' }}>
-      <div style={{ flex:1, position:'relative' }}>
-        <input
-          type="text" value={value || ''} placeholder={placeholder}
-          onChange={e => onChange(e.target.value)}
-          style={s.input}
-        />
-      </div>
-      <MicButton onResult={(t) => update({ [storeKey]: t })} />
-    </div>
-  );
-}
-
-function Sel({ value, onChange, options, placeholder }) {
-  return (
-    <select value={value || ''} onChange={e => onChange(e.target.value)} style={s.input}>
-      {placeholder && <option value="">{placeholder}</option>}
-      {options.map(o =>
-        typeof o === 'string'
-          ? <option key={o} value={o}>{o}</option>
-          : <option key={o.code} value={o.code}>{o.label}</option>
-      )}
-    </select>
-  );
-}
-
-function Tags({ options, value, onChange, small }) {
-  return (
-    <div style={{ display:'flex', flexWrap:'wrap', gap:6 }}>
-      {options.map(opt => (
-        <button key={opt} type="button"
-          style={{ ...s.tag, ...(small?s.tagSmall:{}), ...(value===opt?s.tagSel:{}) }}
-          onClick={() => onChange(value===opt?'':opt)}
-        >
-          {opt}
-        </button>
-      ))}
+    <div style={{ position:'relative' }}>
+      <select
+        value={value || ''}
+        onChange={e => onChange(e.target.value)}
+        style={s.select}
+      >
+        {placeholder && <option value="">{placeholder}</option>}
+        {options.map(o =>
+          typeof o === 'string'
+            ? <option key={o} value={o}>{o}</option>
+            : <option key={o.code} value={o.code}>{o.label}</option>
+        )}
+      </select>
+      <span style={s.selIcon}>{icon || '▾'}</span>
     </div>
   );
 }
@@ -251,47 +227,60 @@ export default function Page2() {
 
           {/* A — Localisation */}
           <SectionBlock label="A — Localisation anatomique" color="#e74c3c">
+
             <F label="Organe principal" required>
-              <select style={s.input} value={data.organe||''} onChange={e => update({ organe:e.target.value, sous_type:'' })}>
-                <option value="">Sélectionner l'organe…</option>
-                {ORGANES.map(o => <option key={o} value={o}>{o}</option>)}
-              </select>
+              <Sel
+                options={ORGANES}
+                placeholder="Sélectionner l'organe…"
+                value={data.organe}
+                onChange={v => update({ organe: v, sous_type: '' })}
+              />
             </F>
 
             {data.organe && (
               <F label={`Sous-type — ${data.organe}`} mt={12}>
-                <Tags options={sousTypes} value={data.sous_type} onChange={up('sous_type')} small />
+                <Sel
+                  options={sousTypes}
+                  placeholder="Sélectionner le sous-type…"
+                  value={data.sous_type}
+                  onChange={up('sous_type')}
+                />
               </F>
             )}
 
             <Row cols={2} mt={12}>
               <F label="Type de tumeur">
-                {/* code 3 used typeT / code 4 used type_tumeur → sync both */}
-                <Tags
+                <Sel
                   options={['Solide','Liquide','Hémato.']}
+                  placeholder="—"
                   value={data.type_tumeur || data.typeT}
-                  onChange={v => update({ type_tumeur:v, typeT:v })}
-                  small
+                  onChange={v => update({ type_tumeur: v, typeT: v })}
                 />
               </F>
               <F label="Latéralité">
-                {/* code 3: lat / code 4: lateralite → sync both */}
-                <Tags
+                <Sel
                   options={['Droit','Gauche','Bilatéral','N/A']}
+                  placeholder="—"
                   value={data.lateralite || data.lat}
-                  onChange={v => update({ lateralite:v, lat:v })}
-                  small
+                  onChange={v => update({ lateralite: v, lat: v })}
                 />
               </F>
             </Row>
 
             <F label="Code CIM-10 (optionnel)" mt={12}>
               <div style={{ display:'flex', gap:8 }}>
-                <select style={{ ...s.input, flex:1 }} value={data.cim10_code||''} onChange={upE('cim10_code')}>
-                  <option value="">Sélectionner…</option>
-                  {CIM10_LIST.map(c => <option key={c.code} value={c.code}>{c.label}</option>)}
-                  <option value="__manual__">Autre (saisir)</option>
-                </select>
+                <div style={{ flex:1, position:'relative' }}>
+                  <select
+                    style={s.select}
+                    value={data.cim10_code || ''}
+                    onChange={upE('cim10_code')}
+                  >
+                    <option value="">Sélectionner…</option>
+                    {CIM10_LIST.map(c => <option key={c.code} value={c.code}>{c.label}</option>)}
+                    <option value="__manual__">Autre (saisir)</option>
+                  </select>
+                  <span style={s.selIcon}>▾</span>
+                </div>
                 {data.cim10_code === '__manual__' && (
                   <input style={{ ...s.input, width:110 }} placeholder="ex: C79.1"
                     value={data.cim10_manual||''} onChange={upE('cim10_manual')} />
@@ -303,15 +292,20 @@ export default function Page2() {
           {/* B — Histologie */}
           <SectionBlock label="B — Histologie" color="#9b59b6">
             <F label="Type histologique">
-              <Sel options={HISTO_TYPES} placeholder="Sélectionner…"
+              <Sel
+                options={HISTO_TYPES}
+                placeholder="Sélectionner…"
                 value={data.type_histologique || data.histo}
-                onChange={v => update({ type_histologique:v, histo:v })} />
+                onChange={v => update({ type_histologique: v, histo: v })}
+              />
             </F>
             <F label="Grade histologique" mt={10}>
-              {/* code 4: grade_histologique (texte complet) / code 3: grade (court) → sync both */}
-              <Sel options={GRADE_HISTO} placeholder="—"
+              <Sel
+                options={GRADE_HISTO}
+                placeholder="—"
                 value={data.grade_histologique || data.grade}
-                onChange={v => update({ grade_histologique:v, grade:v })} />
+                onChange={v => update({ grade_histologique: v, grade: v })}
+              />
             </F>
             <F label="Taille tumorale" mt={10}>
               <Input value={data.taille_tumorale || data.taille} onChange={v => update({ taille_tumorale:v, taille:v })}
@@ -326,8 +320,6 @@ export default function Page2() {
           <SectionBlock label="C — Base de diagnostic" color="#2980b9">
             <MultiCheck options={BASE_DIAG} value={data.base_diagnostic||[]} onChange={up('base_diagnostic')} />
           </SectionBlock>
-
-          
 
         </div>
 
@@ -357,10 +349,13 @@ export default function Page2() {
               ].map(({ key, label, opts }) => (
                 <div key={key} style={{ flex:1, minWidth:0 }}>
                   <div style={s.tnmLabel}>{label}</div>
-                  <select style={s.input} value={data[key]||''} onChange={upE(key)}>
-                    <option value="">—</option>
-                    {opts.map(o => <option key={o} value={o}>{o}</option>)}
-                  </select>
+                  <div style={{ position:'relative' }}>
+                    <select style={s.select} value={data[key]||''} onChange={upE(key)}>
+                      <option value="">—</option>
+                      {opts.map(o => <option key={o} value={o}>{o}</option>)}
+                    </select>
+                    <span style={s.selIcon}>▾</span>
+                  </div>
                 </div>
               ))}
             </div>
@@ -370,11 +365,12 @@ export default function Page2() {
                 <Input value={data.ganglions_envahis} onChange={up('ganglions_envahis')} type="number" placeholder="ex: 2" unit="N+" />
               </F>
               <F label="Niveau topographique">
-                {/* code 3: topo (CircleGroup 1-4) → simple select here */}
-                <select style={s.input} value={data.topo||''} onChange={upE('topo')}>
-                  <option value="">—</option>
-                  {['1','2','3','4'].map(v => <option key={v} value={v}>{v}</option>)}
-                </select>
+                <Sel
+                  options={['1','2','3','4']}
+                  placeholder="—"
+                  value={data.topo}
+                  onChange={v => update({ topo: v })}
+                />
               </F>
             </Row>
 
@@ -403,13 +399,11 @@ export default function Page2() {
             {isTripleNeg && (
               <div style={s.tripleNeg}>⚠ Triple négatif détecté — ER⁻ PR⁻ HER2⁻</div>
             )}
-            {/* Récepteurs tag-style from code 3 (recepteurs field) — kept as extra quick-select */}
             <F label="Statut rapide (optionnel)" mt={10}>
-              <Tags
+              <MultiTags
                 options={['RH+','RH−','HER2+','HER2−','Triple négatif']}
-                value={data.recepteurs}
-                onChange={up('recepteurs')}
-                small
+                value={data.recepteurs ? [data.recepteurs] : []}
+                onChange={arr => update({ recepteurs: arr[arr.length-1] || '' })}
               />
             </F>
           </SectionBlock>
@@ -421,7 +415,6 @@ export default function Page2() {
                 <input style={s.input} type="date" value={data.date_symptomes||''} onChange={upE('date_symptomes')} />
               </F>
               <F label="Date de diagnostic" required>
-                {/* code 3: diagDate / code 4: date_diagnostic → sync */}
                 <input style={s.input} type="date"
                   value={data.date_diagnostic||data.diagDate||''}
                   onChange={e => update({ date_diagnostic:e.target.value, diagDate:e.target.value })} />
@@ -440,7 +433,7 @@ export default function Page2() {
             </Row>
           </SectionBlock>
 
-          {/* G — Établissement + médecin (code 4 détaillé + MicButton de code 3) */}
+          {/* G — Établissement & Médecin */}
           <SectionBlock label="G — Établissement & Médecin" color="#7f8c8d">
             <Row cols={2}>
               <F label="Établissement">
@@ -468,6 +461,19 @@ export default function Page2() {
         </div>
       </div>
 
+      <CustomFieldsRenderer
+        section="diagnostic"
+        values={data.customFields || {}}
+        onChange={(id, name, val) => update({
+          customFields: {
+            ...(data.customFields || {}),
+            [id]: val,
+            [name]: val,
+          },
+        })}
+      />
+
+      {/* ── Boutons navigation — inchangés ── */}
       <BtnRow onBack={() => navigate('/page1')} onNext={() => navigate('/page6')} nextLabel="Suivant" />
     </Layout>
   );
@@ -496,17 +502,32 @@ const s = {
 
   label: { fontSize:11.5, fontWeight:700, color:'#64748B', letterSpacing:'0.2px' },
 
+  /* input classique (dates, number, text) */
   input: {
     width:'100%', padding:'9px 12px', boxSizing:'border-box',
     background:'#F8FAFF', border:'1.5px solid #E2E8F5',
     borderRadius:9, fontSize:13, color:'#1E293B',
     fontFamily:"'Nunito', sans-serif", outline:'none', transition:'border-color 0.15s',
   },
+
+  /* select élégant — même look que input avec chevron */
+  select: {
+    width:'100%', padding:'9px 34px 9px 12px', boxSizing:'border-box',
+    background:'#F8FAFF', border:'1.5px solid #E2E8F5',
+    borderRadius:9, fontSize:13, color:'#1E293B',
+    fontFamily:"'Nunito', sans-serif", outline:'none',
+    appearance:'none', WebkitAppearance:'none', MozAppearance:'none',
+    cursor:'pointer', transition:'border-color 0.15s',
+  },
+  selIcon: {
+    position:'absolute', right:10, top:'50%', transform:'translateY(-50%)',
+    fontSize:12, color:'#94A3B8', pointerEvents:'none', userSelect:'none',
+  },
+
   unit: { position:'absolute', right:10, top:'50%', transform:'translateY(-50%)', fontSize:11, fontWeight:800, color:'#94A3B8', pointerEvents:'none' },
 
   tag: { padding:'6px 14px', borderRadius:30, fontSize:12.5, fontWeight:700, border:'1.5px solid #E2E8F5', background:'#fff', color:'#64748B', cursor:'pointer', transition:'0.12s', fontFamily:"'Nunito', sans-serif" },
   tagSmall: { padding:'5px 11px', fontSize:12 },
-  tagSel: { background:'#4A6CF7', borderColor:'#4A6CF7', color:'#fff', boxShadow:'0 3px 10px rgba(74,108,247,0.3)' },
   tagSelPurple: { background:'#9b59b6', borderColor:'#9b59b6', color:'#fff', boxShadow:'0 3px 10px rgba(155,89,182,0.3)' },
 
   stadeBtn: { flex:1, padding:'9px 0', borderRadius:10, textAlign:'center', border:'2px solid #E2E8F5', background:'#F8FAFF', fontSize:14, fontWeight:900, cursor:'pointer', color:'#94A3B8', fontFamily:"'Poppins', sans-serif", transition:'0.15s' },

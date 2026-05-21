@@ -11,6 +11,7 @@ from .models import (
     RiskFactor, PatientRiskFactor,
     Habit, PatientHabit, Consultation,
     DuplicateCase, DemandeExamen,
+    CustomField, CancerCustomValue,
 )
 
 
@@ -58,6 +59,27 @@ class CancerTypeSerializer(serializers.ModelSerializer):
     class Meta:
         model  = CancerType
         fields = ['id', 'name', 'cim10_code']
+
+
+class CustomFieldSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = CustomField
+        fields = [
+            'id', 'name', 'label', 'field_type', 'options',
+            'is_required', 'is_active', 'order', 'section',
+            'description', 'created_at', 'updated_at',
+        ]
+        read_only_fields = ['created_at', 'updated_at']
+
+
+class CancerCustomValueSerializer(serializers.ModelSerializer):
+    field_id = serializers.IntegerField(source='field.id', read_only=True)
+    field_name = serializers.CharField(source='field.name', read_only=True)
+    field_label = serializers.CharField(source='field.label', read_only=True)
+
+    class Meta:
+        model = CancerCustomValue
+        fields = ['id', 'field_id', 'field_name', 'field_label', 'value']
 
 
 # ─── Traitement (complet) ─────────────────────────────────────────────────────
@@ -184,6 +206,7 @@ class CancerSerializer(serializers.ModelSerializer):
     metastases        = MetastasisSerializer(many=True, read_only=True)
     follow_ups        = FollowUpSerializer(many=True, read_only=True)
     status_history    = CancerStatusHistorySerializer(many=True, read_only=True)
+    custom_values     = CancerCustomValueSerializer(many=True, read_only=True)
 
     class Meta:
         model  = Cancer
@@ -211,6 +234,7 @@ class CancerSerializer(serializers.ModelSerializer):
             # Nested
             'treatments', 'biological_exams', 'imaging_exams',
             'histology', 'metastases', 'follow_ups', 'status_history',
+            'custom_values',
         ]
         read_only_fields = ['created_at', 'updated_at']
 
@@ -222,6 +246,7 @@ class CancerCreateSerializer(serializers.ModelSerializer):
     organe = serializers.CharField(write_only=True, required=False, allow_blank=True)
     date_diagnostic = serializers.DateField(required=False, allow_null=True)
     date_symptomes = serializers.DateField(required=False, allow_null=True)
+    custom_fields = serializers.JSONField(required=False)
 
     class Meta:
         model  = Cancer
@@ -240,16 +265,32 @@ class CancerCreateSerializer(serializers.ModelSerializer):
             'sites_metastatiques',
             'recepteur_er', 'recepteur_pr', 'her2',
             'data_source',
+            'custom_fields',
         ]
 
     def create(self, validated_data):
+        custom_fields = validated_data.pop('custom_fields', {}) or {}
         organe = validated_data.pop('organe', None)
         if organe and not validated_data.get('cancer_type'):
             cancer_type = CancerType.objects.filter(name__iexact=organe).first()
             if not cancer_type:
                 cancer_type = CancerType.objects.create(name=organe)
             validated_data['cancer_type'] = cancer_type
-        return super().create(validated_data)
+        cancer = super().create(validated_data)
+        for key, value in custom_fields.items():
+            field = None
+            if isinstance(key, int) or (isinstance(key, str) and key.isdigit()):
+                field = CustomField.objects.filter(pk=int(key)).first()
+            else:
+                field = CustomField.objects.filter(name=key).first()
+            if not field:
+                continue
+            CancerCustomValue.objects.update_or_create(
+                cancer=cancer,
+                field=field,
+                defaults={'value': '' if value is None else str(value)}
+            )
+        return cancer
 
     def update(self, instance, validated_data):
         organe = validated_data.pop('organe', None)
