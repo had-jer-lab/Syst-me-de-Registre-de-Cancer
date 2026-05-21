@@ -319,6 +319,21 @@ function CancerCard({ cancer, index, patientId, onAddTreatment }) {
             <InfoRow label="Base diagnostic" value={(Array.isArray(cancer.base_diagnostic) ? cancer.base_diagnostic.join(', ') : cancer.base_diagnostic) || '—'} />
           </div>
 
+          {cancer.custom_values?.length > 0 && (
+            <>
+              <Divider />
+              <div style={s.subSectionTitle}>🎛️ Champs personnalisés</div>
+              <div style={{ display: 'grid', gap: 10, marginTop: 4 }}>
+                {cancer.custom_values.map((cv, i) => (
+                  <div key={cv.id || i} style={{ display: 'flex', justifyContent: 'space-between', gap: 12, padding: '12px 14px', borderRadius: 12, background: '#F8FAFC', border: '1px solid #E8EDF5' }}>
+                    <span style={{ color: '#64748B', fontWeight: 700 }}>{cv.field_label || cv.field_name}</span>
+                    <span style={{ color: '#1F2937', fontWeight: 600, textAlign: 'right', minWidth: 120 }}>{cv.value || '—'}</span>
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
+
           {cancer.histology && (
             <>
               <Divider />
@@ -723,6 +738,19 @@ export default function PatientDossier() {
   const age = calcAge(patient.date_naissance);
   const dernierCancer = patient.cancers?.[0];
   const dernierStade = dernierCancer?.stade_clinique || dernierCancer?.stade_pathologique || null;
+  const latestStatus = (dernierCancer?.status_history || []).slice().sort((a, b) => {
+    const da = a?.status_date ? new Date(a.status_date) : 0;
+    const db = b?.status_date ? new Date(b.status_date) : 0;
+    return db - da;
+  })[0] || null;
+
+const medicalStatus = patient.death
+  ? { label: 'Statut', value: 'Décédé', detail: patient.death.date_death ? `Date de décès : ${fmtDate(patient.death.date_death)}` : '' }
+  : dernierCancer?.recidive
+    ? { label: 'Statut', value: 'Récidive', detail: latestStatus?.status_date ? `Dernière mise à jour : ${fmtDate(latestStatus.status_date)}` : '' }
+    : latestStatus
+      ? { label: 'Statut', value: latestStatus.status || 'En suivi', detail: latestStatus.status_date ? `Dernière mise à jour : ${fmtDate(latestStatus.status_date)}` : '' }
+      : { label: 'Statut', value: 'En suivi', detail: '' };
 
   const TABS = [
     { id: 'apercu', label: 'Aperçu', icon: '📋' },
@@ -813,6 +841,11 @@ export default function PatientDossier() {
             <div style={s.heroStat}>
               <div style={s.heroStatLabel}>Dernier RDV</div>
               <RdvPill date={dernierCancer?.date_diagnostic} />
+            </div>
+            <div style={s.heroStat}>
+              <div style={s.heroStatLabel}>{medicalStatus.label}</div>
+              <div style={s.heroStatValue}>{medicalStatus.value}</div>
+              {medicalStatus.detail && <div style={s.heroStatDetail}>{medicalStatus.detail}</div>}
             </div>
             <div style={s.heroStat}>
               <div style={s.heroStatLabel}>Médecin référent</div>
@@ -986,8 +1019,10 @@ const s = {
   heroTag: { padding: '4px 12px', borderRadius: 8, fontSize: 13, fontWeight: 700, background: '#F5F8FF', color: '#1A2B4A', border: '1px solid #DDE4F3' },
   tnmTag: { padding: '4px 12px', borderRadius: 8, fontSize: 12, fontWeight: 800, background: '#EEF2FF', color: '#4A6CF7' },
   heroRight: { display: 'flex', flexDirection: 'column', gap: 14, borderLeft: '1px solid #E8EDF5', paddingLeft: 28, minWidth: 220 },
+  heroStat: { display: 'flex', flexDirection: 'column', gap: 6, padding: '14px 0' },
   heroStatLabel: { fontSize: 11, fontWeight: 700, color: '#7A8BAD', textTransform: 'uppercase', marginBottom: 4 },
   heroStatValue: { fontSize: 13, fontWeight: 700, color: '#1A2B4A' },
+  heroStatDetail: { fontSize: 12, color: '#4B5563', fontWeight: 600 },
   rdvPill: { fontSize: 12, fontWeight: 700, padding: '3px 10px', borderRadius: 20, display: 'inline-block' },
   rdvNone: { fontSize: 12, color: '#C5D0E8', fontWeight: 600 },
   stadeBadge: { padding: '3px 10px', borderRadius: 20, fontSize: 12, fontWeight: 800 },

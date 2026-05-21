@@ -81,6 +81,7 @@ const INITIAL = {
   allergies:       '',       // Patient.allergies
   autresAllergies: '',       // Patient.autres_allergies
   observations:    '',       // Patient.observations
+  customFields:    {},
 
   // ── Page 6 — Treatment ─────────────────────────────────────────────────
   traitements: [],

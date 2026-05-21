@@ -251,6 +251,42 @@ function MyPatientsOverlay({ patients, rcpList, onClose, onSelectRcp, activeFilt
   );
 }
 
+// ─── ✅ WherebyEmbed — iframe direct pour Whereby ─────────────────────────────
+function WherebyEmbed({ roomUrl, onLeave }) {
+  if (!roomUrl) return null;
+
+  // Whereby supporte des paramètres via l'URL pour désactiver le lobby
+  let embedUrl = roomUrl;
+  try {
+    const url = new URL(roomUrl);
+    url.searchParams.set('embed', 'true');
+    url.searchParams.set('skipMediaPermissionPrompt', 'true');
+    url.searchParams.set('displayName', 'Médecin RCP');
+    embedUrl = url.toString();
+  } catch (e) {
+    embedUrl = roomUrl;
+  }
+
+  return (
+    <div style={{ flex: 1, width: '100%', minHeight: 0, position: 'relative' }}>
+      <iframe
+        key={roomUrl}
+        src={embedUrl}
+        style={{
+          position: 'absolute',
+          inset: 0,
+          width: '100%',
+          height: '100%',
+          border: 'none',
+        }}
+        allow="camera; microphone; fullscreen; display-capture; autoplay; clipboard-write"
+        allowFullScreen
+        title="Vidéo-conférence RCP"
+      />
+    </div>
+  );
+}
+
 // ══════════════════════════════════════════════════════════════════════════════
 export default function DiscussionRCP() {
 
@@ -1018,6 +1054,7 @@ export default function DiscussionRCP() {
         @keyframes slideIn { from{opacity:0;transform:translateY(-10px)} to{opacity:1;transform:translateY(0)} }
         @keyframes fadeIn  { from{opacity:0} to{opacity:1} }
         @keyframes blink   { 0%,100%{opacity:1} 50%{opacity:.25} }
+        @keyframes pulse   { 0%,100%{box-shadow:0 0 0 10px rgba(74,144,226,.15),0 0 0 20px rgba(74,144,226,.07)} 50%{box-shadow:0 0 0 14px rgba(74,144,226,.2),0 0 0 28px rgba(74,144,226,.09)} }
         @media (max-width: 768px) {
           .rcp-main-layout { grid-template-columns: 1fr !important; }
           .rcp-sidebar { display: none !important; }
@@ -1270,7 +1307,7 @@ export default function DiscussionRCP() {
                     }}
                     disabled={videoCallLoading}
                     onClick={handleStartVideo}>
-                      📹 Vidéo-conférence
+                      📹 {videoCallLoading ? 'Démarrage...' : 'Vidéo-conférence'}
                     </button>
                   ) : (
                     <button className="btn-h" style={{
@@ -1334,7 +1371,6 @@ export default function DiscussionRCP() {
               if (file?.type.startsWith('image/')) handleImageSelect(file);
             }}
           >
-            {/* Drag overlay */}
             {isDragging && (
               <div style={s.dragOverlay}>
                 <div style={{ fontSize:52, marginBottom:12 }}>🖼️</div>
@@ -1432,7 +1468,6 @@ export default function DiscussionRCP() {
                                           </a>
                                         </div>
                                       ) : msg.msg_type === 'image' ? (
-                                        /* ── 🖼️ MESSAGE IMAGE ── */
                                         <div
                                           className="img-msg"
                                           style={{ cursor:'pointer', borderRadius:12, overflow:'hidden', maxWidth:260 }}
@@ -1706,7 +1741,6 @@ export default function DiscussionRCP() {
                 </div>
               )}
 
-              {/* Preview image avant envoi */}
               {!isRecording && imagePreviewUrl && (
                 <div style={s.imgPreviewBar}>
                   <img src={imagePreviewUrl} alt="preview" style={s.imgPreviewThumb} />
@@ -1728,7 +1762,6 @@ export default function DiscussionRCP() {
 
               {!isRecording && (
                 <div style={s.inputArea}>
-                  {/* Hidden inputs */}
                   <input ref={fileInputRef} type="file" style={{ display:'none' }}
                     onChange={e => { if(e.target.files[0]) setAttachedFile(e.target.files[0]); }} />
                   <input ref={imageInputRef} type="file" accept="image/*" style={{ display:'none' }}
@@ -1745,19 +1778,16 @@ export default function DiscussionRCP() {
                     value={messageInput} onChange={e => setMessageInput(e.target.value)}
                     onKeyPress={e => e.key === 'Enter' && (attachedFile ? handleSendFile() : sendMessage())} />
 
-                  {/* Bouton fichier */}
                   <button title="Joindre un fichier" onClick={() => fileInputRef.current?.click()}
                     style={{ width:40, height:40, borderRadius:9, border:'1px solid #e2e8f0', background:'#f7fafc', color:'#718096', fontSize:16, cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
                     📎
                   </button>
 
-                  {/* Bouton image */}
                   <button title="Envoyer une image" onClick={() => imageInputRef.current?.click()}
                     style={{ width:40, height:40, borderRadius:9, border:'1px solid #e2e8f0', background:'#f7fafc', color:'#718096', fontSize:18, cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
                     🖼️
                   </button>
 
-                  {/* Bouton vocal */}
                   <button title="Message vocal" onClick={startRecording}
                     style={{ width:40, height:40, borderRadius:9, border:'1px solid #e2e8f0', background:'#f7fafc', color:'#718096', fontSize:18, cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
                     🎤
@@ -1774,7 +1804,6 @@ export default function DiscussionRCP() {
       {/* ── POPUPS VIDÉO ── */}
       {incomingCall && (
         <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,.65)', zIndex:9999, display:'flex', alignItems:'center', justifyContent:'center' }}>
-          <style>{`@keyframes pulse { 0%,100%{box-shadow:0 0 0 10px rgba(74,144,226,.15),0 0 0 20px rgba(74,144,226,.07)} 50%{box-shadow:0 0 0 14px rgba(74,144,226,.2),0 0 0 28px rgba(74,144,226,.09)} }`}</style>
           <div style={{ background:'white', borderRadius:20, padding:'36px 40px', textAlign:'center', boxShadow:'0 20px 60px rgba(0,0,0,.3)', maxWidth:360, width:'90%' }}>
             <div style={{ width:80, height:80, borderRadius:'50%', margin:'0 auto 16px', background:'linear-gradient(135deg,#4A90E2,#5CA0F2)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:36, animation:'pulse 1.4s infinite' }}>📹</div>
             <div style={{ fontSize:11, fontWeight:700, color:'#a0aec0', textTransform:'uppercase', marginBottom:6 }}>Appel entrant</div>
@@ -1794,6 +1823,7 @@ export default function DiscussionRCP() {
         </div>
       )}
 
+      {/* ── ✅ 📹 VIDÉO CALL — Whereby iframe ── */}
       {videoCallOpen && selectedRcp?.video_call_room && (
         <div style={{ position:'fixed', inset:0, zIndex:9998, display:'flex', flexDirection:'column', background:'#000' }}>
           <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', padding:'10px 20px', background:'#1a202c', flexShrink:0 }}>
@@ -1812,7 +1842,8 @@ export default function DiscussionRCP() {
               </button>
             )}
           </div>
-          <JitsiMeetEmbed roomName={selectedRcp.video_call_room} onLeave={() => setVideoCallOpen(false)} />
+          {/* ✅ WherebyEmbed remplace JitsiMeetEmbed */}
+          <WherebyEmbed roomUrl={selectedRcp.video_call_room} onLeave={() => setVideoCallOpen(false)} />
         </div>
       )}
 
@@ -1906,68 +1937,12 @@ const s = {
   startBtn:       { padding:'11px 28px', background:'linear-gradient(135deg,#48BB78,#38A169)', color:'white', border:'none', borderRadius:10, fontSize:15, fontWeight:700, cursor:'pointer', transition:'all .2s', boxShadow:'0 4px 14px rgba(72,187,120,.4)' },
   scheduledBanner:{ background:'#FFFBEB', borderRadius:14, padding:'28px 20px', textAlign:'center', border:'2px solid #F6AD55', marginBottom:18 },
   toast:          { position:'fixed', bottom:20, right:20, background:'linear-gradient(135deg,#4A90E2,#5CA0F2)', color:'white', padding:'12px 20px', borderRadius:11, fontSize:13, fontWeight:700, boxShadow:'0 10px 28px rgba(74,144,226,.4)', zIndex:9999 },
-  // ── 🖼️ Image styles ──
   imgPreviewBar:  { display:'flex', alignItems:'center', gap:10, padding:'10px 20px', background:'#EBF4FF', borderTop:'1.5px solid #BEE3F8' },
   imgPreviewThumb:{ width:52, height:52, objectFit:'cover', borderRadius:9, flexShrink:0, boxShadow:'0 2px 8px rgba(0,0,0,.12)' },
   imgSendBtn:     { padding:'8px 18px', background:'linear-gradient(135deg,#4A90E2,#5CA0F2)', color:'white', border:'none', borderRadius:8, fontSize:13, fontWeight:700, cursor:'pointer', whiteSpace:'nowrap' },
-  // ── 🖼️ Lightbox styles ──
   lightboxOverlay:{ position:'fixed', inset:0, background:'rgba(0,0,0,.88)', zIndex:9999, display:'flex', alignItems:'center', justifyContent:'center', animation:'fadeIn .2s', cursor:'zoom-out' },
   lightboxContainer:{ position:'relative', maxWidth:'92vw', maxHeight:'90vh', display:'flex', flexDirection:'column', alignItems:'center', gap:14, cursor:'default' },
   lightboxImg:    { maxWidth:'100%', maxHeight:'80vh', borderRadius:14, boxShadow:'0 20px 60px rgba(0,0,0,.5)', objectFit:'contain' },
   lightboxClose:  { position:'absolute', top:-16, right:-16, width:36, height:36, borderRadius:'50%', border:'none', background:'white', color:'#2d3748', fontSize:16, fontWeight:700, cursor:'pointer', boxShadow:'0 4px 12px rgba(0,0,0,.3)', display:'flex', alignItems:'center', justifyContent:'center' },
   lightboxDownload:{ padding:'9px 22px', background:'white', color:'#4A90E2', borderRadius:10, fontSize:13, fontWeight:700, textDecoration:'none', boxShadow:'0 4px 14px rgba(0,0,0,.2)' },
 };
-
-// ─── Jitsi Meet embarqué via External API ─────────────────────────────────────
-function JitsiMeetEmbed({ roomName, onLeave }) {
-  const containerRef = useRef(null);
-  const apiRef = useRef(null);
-  const JITSI_HOST = 'meet.jit.si';
-
-  useEffect(() => {
-    const loadJitsi = () => {
-      if (!containerRef.current || apiRef.current) return;
-      apiRef.current = new window.JitsiMeetExternalAPI(JITSI_HOST, {
-        roomName: roomName,
-        parentNode: containerRef.current,
-        width: '100%',
-        height: '100%',
-        configOverwrite: {
-          startWithAudioMuted: false,
-          startWithVideoMuted: false,
-          disableDeepLinking: true,
-          prejoinPageEnabled: false,
-          prejoinConfig: { enabled: false },
-          lobbyModeEnabled: false, enableLobbyChat: false,
-          fileRecordingsEnabled: false, liveStreamingEnabled: false,
-          recordingService: { enabled: false, sharingEnabled: false }, dropbox: { appKey: null },
-          enableClosePage: false,
-        },
-        interfaceConfigOverwrite: {
-          SHOW_JITSI_WATERMARK: false,
-          SHOW_WATERMARK_FOR_GUESTS: false,
-          SHOW_CHROME_EXTENSION_BANNER: false,
-          TOOLBAR_BUTTONS: ['microphone','camera','chat','raisehand','tileview','fullscreen'],
-        },
-      });
-      apiRef.current.addEventListener('videoConferenceLeft', () => { if (onLeave) onLeave(); });
-      apiRef.current.addEventListener('readyToClose',        () => { if (onLeave) onLeave(); });
-    };
-
-    if (window.JitsiMeetExternalAPI) {
-      loadJitsi();
-    } else {
-      const script = document.createElement('script');
-      script.src = `https://${JITSI_HOST}/external_api.js`;
-      script.async = true;
-      script.onload = loadJitsi;
-      document.head.appendChild(script);
-    }
-
-    return () => {
-      if (apiRef.current) { apiRef.current.dispose(); apiRef.current = null; }
-    };
-  }, [roomName]);
-
-  return <div ref={containerRef} style={{ flex:1, width:'100%', minHeight:0 }} />;
-}

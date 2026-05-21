@@ -12,10 +12,11 @@ from .models import (
     BiologicalExam, ImagingExam,
     Histology, Metastasis, FollowUp,
     Consultation, Death,
+    CustomField,
 )
 from .serializers import (
     WilayaSerializer, CommuneSerializer, HospitalSerializer,
-    CancerTypeSerializer,
+    CancerTypeSerializer, CustomFieldSerializer,
     PatientListSerializer, PatientDetailSerializer,
     CancerSerializer, CancerCreateSerializer,
     TreatmentSerializer, TreatmentCreateSerializer,
@@ -29,7 +30,7 @@ from .serializers import (
 
 class IsOwnerOrAdmin(permissions.BasePermission):
     def has_object_permission(self, request, view, obj):
-        if request.user.is_staff or request.user.role == 'admin':
+        if request.user.is_staff or getattr(request.user, 'role', '') == 'admin':
             return True
         if isinstance(obj, Patient):
             return obj.created_by == request.user
@@ -38,6 +39,14 @@ class IsOwnerOrAdmin(permissions.BasePermission):
         if hasattr(obj, 'cancer'):
             return obj.cancer.patient.created_by == request.user
         return False
+
+
+class IsAdminOrStaff(permissions.BasePermission):
+    def has_permission(self, request, view):
+        return bool(
+            request.user and request.user.is_authenticated and
+            (request.user.is_staff or getattr(request.user, 'role', '') == 'admin')
+        )
 
 
 def _patient_qs(user):
@@ -85,6 +94,34 @@ class CancerTypeListView(generics.ListAPIView):
     permission_classes = [permissions.IsAuthenticated]
     filter_backends    = [filters.SearchFilter]
     search_fields      = ['name', 'cim10_code']
+
+
+class CustomFieldListCreateView(generics.ListCreateAPIView):
+    serializer_class   = CustomFieldSerializer
+    filter_backends    = [filters.SearchFilter, filters.OrderingFilter]
+    search_fields      = ['label', 'name', 'section']
+    ordering_fields    = ['order', 'created_at']
+    ordering           = ['section', 'order']
+
+    def get_permissions(self):
+        if self.request.method == 'POST':
+            return [IsAdminOrStaff()]
+        return [permissions.IsAuthenticated()]
+
+    def get_queryset(self):
+        qs = CustomField.objects.order_by('section', 'order', 'created_at')
+        section = self.request.query_params.get('section')
+        if section:
+            qs = qs.filter(section=section)
+        if not (self.request.user.is_staff or getattr(self.request.user, 'role', '') == 'admin'):
+            qs = qs.filter(is_active=True)
+        return qs
+
+
+class CustomFieldDetailView(generics.RetrieveUpdateDestroyAPIView):
+    queryset           = CustomField.objects.all()
+    serializer_class   = CustomFieldSerializer
+    permission_classes = [IsAdminOrStaff]
 
 
 # ─── Patients ────────────────────────────────────────────────────────────────

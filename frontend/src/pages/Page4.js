@@ -4,6 +4,7 @@ import { usePatient } from '../context/PatientContext';
 import Layout from '../components/Layout';
 import { SC, Field, Select, TagGroup, PageHeader, BtnRow } from '../components/FormFields';
 import { MicButton } from '../components/MicButton';
+import CustomFieldsRenderer from '../components/CustomFieldsRenderer';
 
 function calcIMC(poids, taille) {
   const p = parseFloat(poids);
@@ -51,7 +52,7 @@ export default function Page4() {
   };
 
   return (
-    <Layout currentStep={4} progress={80}>
+    <Layout currentStep={5} progress={80}>
       <PageHeader
         icon="🌿"
         iconBg="linear-gradient(135deg,#00C9A7,#00a98b)"
@@ -227,6 +228,18 @@ export default function Page4() {
               </div>
             </Field>
           </SC>
+
+          <CustomFieldsRenderer
+            section="autres"
+            values={data.customFields || {}}
+            onChange={(id, name, val) => update({
+              customFields: {
+                ...(data.customFields || {}),
+                [id]: val,
+                [name]: val,
+              },
+            })}
+          />
 
           {/* Observations — avec MicButton sur textarea */}
           <SC label="Observations complémentaires">

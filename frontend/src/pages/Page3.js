@@ -4,6 +4,7 @@ import { usePatient } from '../context/PatientContext';
 import Layout from '../components/Layout';
 import { SC, Field, Select, TagGroup, ImgCard, PageHeader, BtnRow } from '../components/FormFields';
 import { MicButton } from '../components/MicButton';
+import CustomFieldsRenderer from '../components/CustomFieldsRenderer';
 
 const IMAGERIE_LIST = [
   { type: 'IRM', icon: '🏥' },
@@ -61,7 +62,7 @@ export default function Page3() {
   };
 
   return (
-    <Layout currentStep={3} progress={60}>
+    <Layout currentStep={4} progress={60}>
       <PageHeader
         icon="🔬"
         iconBg="linear-gradient(135deg,#FFA26B,#ffbf97)"
@@ -180,6 +181,18 @@ export default function Page3() {
             <button className="list-add" onClick={addRechute}>＋ Ajouter une rechute</button>
           </SC>
 
+          <CustomFieldsRenderer
+            section="biologie"
+            values={data.customFields || {}}
+            onChange={(id, name, val) => update({
+              customFields: {
+                ...(data.customFields || {}),
+                [id]: val,
+                [name]: val,
+              },
+            })}
+          />
+
           {/* Pathologies chroniques — avec MicButton sur le champ nom */}
           <SC label="Pathologies chroniques associées">
             {(data.pathos || []).map((p, i) => (
@@ -209,7 +222,7 @@ export default function Page3() {
         </div>
       </div>
 
-      <BtnRow onBack={() => navigate('/page2')} onNext={() => navigate('/page4')} />
+      <BtnRow onBack={() => navigate('/page6')} onNext={() => navigate('/page4')} />
     </Layout>
   );
 }

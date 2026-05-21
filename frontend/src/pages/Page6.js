@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { usePatient } from '../context/PatientContext';
 import Layout from '../components/Layout';
 import { PageHeader, BtnRow } from '../components/FormFields';
+import CustomFieldsRenderer from '../components/CustomFieldsRenderer';
 
 /* ─── Constants ──────────────────────────────────────────────────────────── */
 
@@ -342,10 +343,22 @@ export default function Page6() {
         </div>
       )}
 
+      <CustomFieldsRenderer
+        section="traitement"
+        values={data.customFields || {}}
+        onChange={(id, name, val) => update({
+          customFields: {
+            ...(data.customFields || {}),
+            [id]: val,
+            [name]: val,
+          },
+        })}
+      />
+
       <BtnRow
         onBack={() => navigate('/page2')}
         onNext={() => navigate('/page3')}
-        nextLabel="Suivant → Biologie & Imagerie"
+        nextLabel="Suivant "
       />
     </Layout>
   );

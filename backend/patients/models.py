@@ -479,3 +479,70 @@ class PatientFormSubmission(models.Model):
 
     def __str__(self):
         return f"Submission — {self.patient} — {self.created_at:%d/%m/%Y %H:%M}"
+        return f"Soumission formulaire #{self.id} pour {self.patient}"
+
+
+# ─── Champs personnalisés ─────────────────────────────────────────────────────
+
+class CustomField(models.Model):
+    FIELD_TYPE_CHOICES = [
+        ('text',     'Texte libre'),
+        ('number',   'Nombre'),
+        ('date',     'Date'),
+        ('select',   'Liste déroulante'),
+        ('boolean',  'Oui / Non'),
+        ('textarea', 'Texte long'),
+    ]
+    SECTION_CHOICES = [
+        ('diagnostic', 'Diagnostic & Cancer'),
+        ('biologie',   'Données biologiques'),
+        ('traitement', 'Traitement'),
+        ('autres',     'Autres'),
+    ]
+
+    name          = models.CharField(max_length=100, verbose_name='Nom technique')
+    label         = models.CharField(max_length=200, verbose_name='Libellé affiché')
+    field_type    = models.CharField(
+        max_length=20,
+        choices=FIELD_TYPE_CHOICES,
+        default='text',
+        verbose_name='Type de champ'
+    )
+    options       = models.JSONField(default=list, blank=True, help_text='Pour les listes déroulantes: ["option1", "option2"]')
+    is_required   = models.BooleanField(default=False, verbose_name='Obligatoire')
+    is_active     = models.BooleanField(default=True, verbose_name='Actif')
+    order         = models.PositiveIntegerField(default=0, verbose_name='Ordre d\'affichage')
+    section       = models.CharField(
+        max_length=50,
+        choices=SECTION_CHOICES,
+        default='diagnostic',
+        verbose_name='Section'
+    )
+    description   = models.TextField(blank=True, verbose_name='Description')
+    created_at    = models.DateTimeField(auto_now_add=True)
+    updated_at    = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['section', 'order', 'created_at']
+        verbose_name = 'Champ personnalisé'
+        verbose_name_plural = 'Champs personnalisés'
+
+    def __str__(self):
+        return f"{self.label} ({self.get_field_type_display()})"
+
+
+class CancerCustomValue(models.Model):
+    """Stores custom field values for each cancer"""
+    cancer    = models.ForeignKey(Cancer, on_delete=models.CASCADE, related_name='custom_values')
+    field     = models.ForeignKey(CustomField, on_delete=models.CASCADE, related_name='values')
+    value     = models.TextField(blank=True, verbose_name='Valeur')
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        unique_together = ('cancer', 'field')
+        verbose_name = 'Valeur de champ personnalisé'
+        verbose_name_plural = 'Valeurs de champs personnalisés'
+
+    def __str__(self):
+        return f"{self.field.label}: {self.value[:50]}"

@@ -138,7 +138,7 @@ export default function CustomFieldsRenderer({ section = 'diagnostic', values = 
     apiFetch(`/patients/custom-fields/?section=${section}`)
       .then(data => {
         const list = Array.isArray(data) ? data : (data.results || []);
-        setFields(list.filter(f => f.is_active));
+        setFields(list.filter(f => f.is_active && f.section === section));
       })
       .catch(() => {})
       .finally(() => setLoading(false));
