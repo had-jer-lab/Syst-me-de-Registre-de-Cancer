@@ -144,6 +144,8 @@ class PatientListSerializer(serializers.ModelSerializer):
     full_name     = serializers.ReadOnlyField()
     commune_name  = serializers.CharField(source='commune.name',   read_only=True)
     wilaya_name   = serializers.CharField(source='commune.wilaya.name', read_only=True)
+    latitude      = serializers.FloatField(source='commune.latitude', read_only=True)
+    longitude     = serializers.FloatField(source='commune.longitude', read_only=True)
     hospital_name = serializers.CharField(source='hospital.name',  read_only=True)
     medecin_nom   = serializers.SerializerMethodField()
     # Résumé cancer (le plus récent)
@@ -155,7 +157,7 @@ class PatientListSerializer(serializers.ModelSerializer):
             'id', 'numero_dossier', 'national_id',
             'first_name', 'last_name', 'full_name',
             'date_naissance', 'age', 'sexe', 'phone',
-            'commune', 'commune_name', 'wilaya_name',
+            'commune', 'commune_name', 'wilaya_name', 'latitude', 'longitude',
             'hospital', 'hospital_name',
             'created_by', 'medecin_nom',
             'data_source', 'created_at', 'updated_at',

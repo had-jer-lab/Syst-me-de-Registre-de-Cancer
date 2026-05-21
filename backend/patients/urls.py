@@ -6,9 +6,10 @@ from .views import (
     WilayaListView, CommuneListView, HospitalListView,
     CancerTypeListView,
     PatientListCreateView, PatientDetailView,
-    DashboardStatsView,
+    DashboardStatsView, WilayaStatsView,
     CancerListCreateView, CancerDetailView,
     ConsultationListCreateView,
+    StatsByWilayaView, StatsByCommuneView, StatisticsDataView,
 )
 
 urlpatterns = [
@@ -20,6 +21,7 @@ urlpatterns = [
 
     # ── Dashboard stats ───────────────────────────────────
     path('stats/',        DashboardStatsView.as_view(), name='dashboard-stats'),
+    path('wilaya-stats/', WilayaStatsView.as_view(),   name='wilaya-stats'),
 
     # ── Patients ──────────────────────────────────────────
     path('',              PatientListCreateView.as_view(), name='patients'),
@@ -31,4 +33,9 @@ urlpatterns = [
 
     # ── Nested : Consultations ────────────────────────────
     path('<int:patient_pk>/consultations/',  ConsultationListCreateView.as_view(), name='patient-consultations'),
+
+    # ── Statistiques pour la carte ────────────────────────
+    path('stats/wilaya/', StatsByWilayaView.as_view(), name='stats-by-wilaya'),
+    path('stats/commune/', StatsByCommuneView.as_view(), name='stats-by-commune'),
+    path('statistics-data/', StatisticsDataView.as_view(), name='statistics-data'),
 ]

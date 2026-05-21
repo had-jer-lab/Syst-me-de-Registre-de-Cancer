@@ -601,7 +601,14 @@ export default function AdminDashboard() {
           {navItems.map(({ id, icon, label }) => (
             <button key={id}
               style={{ ...s.navItem, ...(page === id ? s.navActive : {}) }}
-              onClick={() => { setPage(id); setSearch(''); }}>
+              onClick={() => {
+                if (id === 'statistics') {
+                  navigate('/statistics');
+                  return;
+                }
+                setPage(id);
+                setSearch('');
+              }}>
               <span style={s.navIcon}>{icon}</span>
               <span>{label}</span>
             </button>

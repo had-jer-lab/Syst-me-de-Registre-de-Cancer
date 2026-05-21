@@ -1,6 +1,8 @@
 import React from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { PatientProvider } from './context/PatientContext';
+import { AuthProvider } from './context/AuthContext';
+import ProtectedRoute from './components/ProtectedRoute';
 import './styles/global.css';
 
 import AdminDashboard from './pages/AdminDashboard';
@@ -19,34 +21,37 @@ import Statistics from './pages/Statistics';
 
 export default function App() {
   return (
-    <PatientProvider>
-      <BrowserRouter>
-        <Routes>
-          {/* Point d'entrée → Créer compte / Connexion */}
-          <Route path="/"          element={<Navigate to="/auth" replace />} />
-          <Route path="/auth"      element={<AuthPage />} />
+    <AuthProvider>
+      <PatientProvider>
+        <BrowserRouter>
+          <Routes>
+            {/* Point d'entrée → Créer compte / Connexion */}
+            <Route path="/"          element={<Navigate to="/auth" replace />} />
+            <Route path="/auth"      element={<AuthPage />} />
 
-          <Route path="/admin" element={<AdminDashboard />} />
+            {/* Protected Routes */}
+            <Route path="/admin" element={<ProtectedRoute><AdminDashboard /></ProtectedRoute>} />
 
-          {/* Dashboard principal */}
-          <Route path="/dashboard" element={<Dashboard />} />
-          <Route path="/import"    element={<ImportData />} />
-          <Route path="/rcp"       element={<DiscussionRCP />} />
+            {/* Dashboard principal */}
+            <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
+            <Route path="/import"    element={<ProtectedRoute><ImportData /></ProtectedRoute>} />
+            <Route path="/rcp"       element={<ProtectedRoute><DiscussionRCP /></ProtectedRoute>} />
 
-          {/* Formulaire patient en 5 étapes */}
-          <Route path="/page1"     element={<Page1 />} />
-          <Route path="/page2"     element={<Page2 />} />
-          <Route path="/page3"     element={<Page3 />} />
-          <Route path="/page4"     element={<Page4 />} />
-          <Route path="/page5"     element={<Page5 />} />
-          <Route path="/patient/:id/edit" element={<EditPatient />} />
-          <Route path="/statistics" element={<Statistics />} />
+            {/* Formulaire patient en 5 étapes */}
+            <Route path="/page1"     element={<ProtectedRoute><Page1 /></ProtectedRoute>} />
+            <Route path="/page2"     element={<ProtectedRoute><Page2 /></ProtectedRoute>} />
+            <Route path="/page3"     element={<ProtectedRoute><Page3 /></ProtectedRoute>} />
+            <Route path="/page4"     element={<ProtectedRoute><Page4 /></ProtectedRoute>} />
+            <Route path="/page5"     element={<ProtectedRoute><Page5 /></ProtectedRoute>} />
+            <Route path="/patient/:id/edit" element={<ProtectedRoute><EditPatient /></ProtectedRoute>} />
+            <Route path="/statistics" element={<ProtectedRoute><Statistics /></ProtectedRoute>} />
 
 
-          {/* Fallback */}
-          <Route path="*"          element={<Navigate to="/auth" replace />} />
-        </Routes>
-      </BrowserRouter>
-    </PatientProvider>
+            {/* Fallback */}
+            <Route path="*"          element={<Navigate to="/auth" replace />} />
+          </Routes>
+        </BrowserRouter>
+      </PatientProvider>
+    </AuthProvider>
   );
 }

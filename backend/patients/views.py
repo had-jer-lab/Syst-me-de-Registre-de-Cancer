@@ -240,6 +240,40 @@ class DashboardStatsView(APIView):
         })
 
 
+class WilayaStatsView(APIView):
+    """Statistiques de cancer par wilaya pour la carte."""
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request):
+        user = request.user
+
+        if user.is_staff or user.role == 'admin':
+            patients_qs = Patient.objects.filter(deleted_at__isnull=True)
+        else:
+            patients_qs = Patient.objects.filter(created_by=user, deleted_at__isnull=True)
+
+        # Agréger par wilaya
+        wilaya_stats = (
+            patients_qs
+            .filter(commune__wilaya__isnull=False)
+            .values('commune__wilaya__name')
+            .annotate(cases=Count('id'))
+            .order_by('-cases')
+        )
+
+        # Formater pour le frontend
+        data = [
+            {
+                'id': stat['commune__wilaya__name'],
+                'label': stat['commune__wilaya__name'],
+                'value': stat['cases']
+            }
+            for stat in wilaya_stats
+        ]
+
+        return Response(data)
+
+
 # ─── Cancers ──────────────────────────────────────────────────────────────────
 
 class CancerListCreateView(generics.ListCreateAPIView):
@@ -290,3 +324,124 @@ class ConsultationListCreateView(generics.ListCreateAPIView):
             patient_id=self.kwargs.get('patient_pk'),
             user=self.request.user,
         )
+
+
+# ─── Statistiques ─────────────────────────────────────────────────────────────
+
+class StatsByWilayaView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request):
+        from django.db.models import Count
+        # Agréger les patients par wilaya
+        data = Patient.objects.values('commune__wilaya__name').annotate(count=Count('id'))
+        result = {item['commune__wilaya__name']: item['count'] for item in data}
+        return Response(result)
+
+
+class StatsByCommuneView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request):
+        from django.db.models import Count
+        # Agréger les patients par commune (daïra)
+        data = Patient.objects.values('commune__name').annotate(count=Count('id'))
+        result = {item['commune__name']: item['count'] for item in data}
+        return Response(result)
+
+
+# ─── Statistics Data for Frontend ─────────────────────────────────────────────
+
+class StatisticsDataView(APIView):
+    """
+    Returns patient data in the format expected by the frontend statistics page.
+    Each patient with cancer becomes a data point with cases=1.
+    """
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request):
+        # Get all patients with their cancers
+        patients = Patient.objects.select_related(
+            'commune__wilaya',
+            'commune',
+        ).prefetch_related('cancers__cancer_type').filter(
+            deleted_at__isnull=True
+        )
+
+        # User permissions: admin sees all, others see their own patients
+        user = request.user
+        if user.is_authenticated and not (user.is_staff or user.role == 'admin'):
+            patients = patients.filter(created_by=user)
+        # For anonymous users or admins, show all patients
+
+        data = []
+        months_fr = ['Jan', 'Fév', 'Mar', 'Avr', 'Mai', 'Jun',
+                    'Jul', 'Aoû', 'Sep', 'Oct', 'Nov', 'Déc']
+
+        for patient in patients:
+            for cancer in patient.cancers.all():
+                # Skip if no cancer type
+                if not cancer.cancer_type:
+                    continue
+
+                # Map cancer type name to frontend ID
+                cancer_id = self.map_cancer_type_to_id(cancer.cancer_type.name)
+
+                # Calculate age group
+                age_group = self.calculate_age_group(patient.age)
+
+                # Get year from diagnostic date or created_at
+                year = cancer.date_diagnostic.year if cancer.date_diagnostic else cancer.created_at.year
+
+                # Get month (use diagnostic month or created month)
+                month = months_fr[(cancer.date_diagnostic.month - 1) if cancer.date_diagnostic else (cancer.created_at.month - 1)]
+
+                # Get stage (prefer clinical over pathological)
+                stage = cancer.stade_clinique or cancer.stade_pathologique or 'Stade I'
+
+                data.append({
+                    'cancer':       cancer_id,
+                    'age':          age_group,
+                    'sex':          patient.sexe,
+                    'year':         year,
+                    'month':        month,
+                    'wilaya':       patient.commune.wilaya.name if patient.commune else 'Inconnue',
+                    'daira':        patient.commune.name if patient.commune else None,
+                    'stade':        stage,
+                    'mode':         'Dépistage',
+                    'traitement':   'Chirurgie',
+                    'cases':        1,
+                    'latitude':     float(patient.commune.latitude)  if (patient.commune and patient.commune.latitude  is not None) else None,
+                    'longitude':    float(patient.commune.longitude) if (patient.commune and patient.commune.longitude is not None) else None,
+                    'commune_name': patient.commune.name if patient.commune else None,
+                })
+
+        return Response(data)
+
+    def map_cancer_type_to_id(self, cancer_name):
+        """Map cancer type name to frontend cancer ID"""
+        mapping = {
+            'Sein': 'sein',
+            'Poumon': 'poumon',
+            'Colorectal': 'colorectal',
+            'Prostate': 'prostate',
+            'Col de l\'utérus': 'col_uterus',
+            'Estomac': 'estomac',
+            'Thyroïde': 'thyroide',
+            'Leucémie': 'leucemie',
+            'Foie': 'foie',
+        }
+        return mapping.get(cancer_name, 'sein')  # Default to sein
+
+    def calculate_age_group(self, age):
+        """Convert age to age group string"""
+        if age < 15:
+            return '0–14'
+        elif age < 30:
+            return '15–29'
+        elif age < 45:
+            return '30–44'
+        elif age < 60:
+            return '45–59'
+        else:
+            return '60+'
