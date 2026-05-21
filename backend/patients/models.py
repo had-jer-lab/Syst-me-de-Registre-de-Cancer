@@ -453,8 +453,7 @@ class Notification(models.Model):
         ordering = ['-created_at']
 
     def __str__(self):
-        return f"Notification {self.type} pour {self.user}"
-
+        return f"{self.type} — {self.user} — {self.title}"
 
 class PatientFormToken(models.Model):
     patient       = models.OneToOneField(Patient, on_delete=models.CASCADE, related_name='form_token')
@@ -465,7 +464,7 @@ class PatientFormToken(models.Model):
     updated_at    = models.DateTimeField(auto_now=True)
 
     def __str__(self):
-        return f"Token formulaire {self.patient}"
+        return f"FormToken — {self.patient} ({self.token})"
 
 
 class PatientFormSubmission(models.Model):
@@ -479,6 +478,7 @@ class PatientFormSubmission(models.Model):
         ordering = ['-created_at']
 
     def __str__(self):
+        return f"Submission — {self.patient} — {self.created_at:%d/%m/%Y %H:%M}"
         return f"Soumission formulaire #{self.id} pour {self.patient}"
 
 

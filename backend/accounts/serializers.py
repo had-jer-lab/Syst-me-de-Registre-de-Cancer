@@ -31,9 +31,6 @@ class UserSerializer(serializers.ModelSerializer):
     def get_permissions(self, obj):
         return obj.permissions_list
 
-    def get_full_name(self, obj):
-        return f"{obj.prenom or ''} {obj.nom or ''}".strip() or obj.email
-
     def create(self, validated_data):
         request = self.context.get('request')
         password = validated_data.pop('password', None)
@@ -95,3 +92,4 @@ class LoginLogSerializer(serializers.ModelSerializer):
         model = LoginLog
         fields = ['id', 'user', 'user_name', 'user_email', 'action', 'ip_address', 'detail', 'timestamp']
         read_only_fields = ['id', 'timestamp']
+

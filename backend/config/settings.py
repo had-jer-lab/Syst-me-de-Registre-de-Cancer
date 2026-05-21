@@ -11,7 +11,8 @@ DEV_LOCAL_IP = config('DEV_LOCAL_IP', default='')
 
 SECRET_KEY = config('SECRET_KEY', default='django-insecure-temporary-key-for-dev')
 DEBUG = config('DEBUG', cast=bool, default=True)
-ALLOWED_HOSTS = ['localhost', '127.0.0.1']
+ALLOWED_HOSTS = ['*']
+
 
 INSTALLED_APPS = [
     'django.contrib.admin',
@@ -63,16 +64,25 @@ TEMPLATES = [
 
 WSGI_APPLICATION = 'config.wsgi.application'
 
-DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.postgresql',
-        'NAME':     'registre_cancer',
-        'USER':    'postgres',
-        'PASSWORD': '123',
-        'HOST':     config('DB_HOST', default='localhost'),
-        'PORT':     config('DB_PORT', default='5433'),
+# Database configuration - use SQLite for development if USE_SQLITE is set
+if config('USE_SQLITE', default='True').lower() == 'true':
+    DATABASES = {
+        'default': {
+            'ENGINE': 'django.db.backends.sqlite3',
+            'NAME': BASE_DIR / 'db.sqlite3',
+        }
     }
-}
+else:
+    DATABASES = {
+        'default': {
+            'ENGINE': 'django.db.backends.postgresql',
+            'NAME':     config('DB_NAME', default='registre_cancer'),
+            'USER':     config('DB_USER', default='postgres'),
+            'PASSWORD': config('DB_PASSWORD', default='123'),
+            'HOST':     config('DB_HOST', default='localhost'),
+            'PORT':     config('DB_PORT', default='5432'),
+        }
+    }
 
 AUTH_USER_MODEL = 'accounts.User'
 
@@ -92,7 +102,7 @@ SIMPLE_JWT = {
 
 CORS_ALLOWED_ORIGINS = [
     "http://localhost:3000",
-    "http://127.0.0.1:3000",
+    "http://192.168.1.9:3000",
 ]
 
 # If a DEV_LOCAL_IP is configured, allow it as well (useful for mobile testing on LAN)

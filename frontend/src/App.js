@@ -7,10 +7,10 @@ import AuthPage      from './pages/AuthPage';
 import Dashboard     from './pages/Dashboard';
 import ImportData    from './pages/ImportData';
 import DiscussionRCP from './pages/DiscussionRCP';
-import PatientQRCode from './pages/PatientQRCode';
 import PatientPublicView from './pages/PatientPublicView';
 import PatientPublicForm from './pages/PatientPublicForm';
 import EditPatient from './pages/EditPatient';
+import DemandeExamen  from './pages/DemandeExamen';
 import Page1 from './pages/Page1';
 import Page2 from './pages/Page2';
 import Page3 from './pages/Page3';
@@ -30,9 +30,7 @@ export default function App() {
           <Route path="/dashboard"  element={<Dashboard />} />
           <Route path="/import"     element={<ImportData />} />
           <Route path="/rcp"        element={<DiscussionRCP />} />
-          <Route path="/patient/:id/qr" element={<PatientQRCode />} />
           <Route path="/patient-public/:id" element={<PatientPublicView />} />
-          <Route path="/patient-form/:token" element={<PatientPublicForm />} />
           {/* Formulaire patient en 5 étapes */}
           <Route path="/page1"     element={<Page1 />} />
           <Route path="/page2"     element={<Page2 />} />
@@ -41,6 +39,8 @@ export default function App() {
           <Route path="/page5"     element={<Page5 />} />
           <Route path="/page6"     element={<Page6 />} />
           <Route path="/patient/:id/edit" element={<EditPatient />} />
+          <Route path="/patient-form/:token" element={<PatientPublicForm />} />
+
           {/* <Route path="/patient/:id/dossier" element={<PatientDossier />} /> */}
           <Route path="/patient/:id" element={<PatientDossier />} />
 
