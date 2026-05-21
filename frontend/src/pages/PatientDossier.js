@@ -212,6 +212,7 @@ function EmptyState({ icon, text }) {
   );
 }
 
+// ── Section Formulaire Patient (réponses QR) ──────────────────────────────────
 function FormSubmissionsSection({ patientId }) {
   const [submissions, setSubmissions] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -243,10 +244,13 @@ function FormSubmissionsSection({ patientId }) {
         Dernière réponse : {new Date(latest.created_at).toLocaleDateString('fr-FR', { day: '2-digit', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
         {submissions.length > 1 && <span style={{ marginLeft: 8, color: '#6366f1' }}>({submissions.length} réponses au total)</span>}
       </div>
-      {Object.entries(LABELS).map(([key, label]) => d[key] ? <InfoRow key={key} label={label} value={d[key]} /> : null)}
+      {Object.entries(LABELS).map(([key, label]) =>
+        d[key] ? <InfoRow key={key} label={label} value={d[key]} /> : null
+      )}
     </div>
   );
 }
+
 
 function CancerCard({ cancer, index, patientId, onAddTreatment }) {
   const [open, setOpen] = useState(index === 0);
@@ -638,7 +642,10 @@ export default function PatientDossier() {
   const [treatmentLoading, setTreatmentLoading] = useState(false);
   const [showQR, setShowQR] = useState(false);
   const [toast, setToast] = useState('');
-
+  const showToast = (msg, duration = 3000) => {
+  setToast(msg);
+  setTimeout(() => setToast(''), duration);
+  };
   const load = useCallback(async () => {
     setLoading(true);
     try {
@@ -698,7 +705,6 @@ export default function PatientDossier() {
   };
 
   const showToastMsg = (msg) => { setToast(msg); setTimeout(() => setToast(''), 3000); };
-
   if (loading) return (
     <div style={s.loadingScreen}>
       <div style={s.loadingSpinner} />
@@ -730,8 +736,18 @@ export default function PatientDossier() {
       {toast && <div style={s.toast}>{toast}</div>}
 
       {showConsultModal && (
-        <AddConsultationModal patientId={id} onClose={() => setShowConsultModal(false)} onSaved={() => { setShowConsultModal(false); load(); showToastMsg('✓ Consultation enregistrée'); }} />
+        <AddConsultationModal
+           patientId={id}
+           onClose={() => setShowConsultModal(false)}
+           onSaved={() => {
+            setShowConsultModal(false);
+            load();
+            showToast('✓ Consultation enregistrée');
+         }}
+         />
       )}
+
+      
 
       {showTreatmentModal && (
         <AddTreatmentModal
@@ -768,7 +784,7 @@ export default function PatientDossier() {
           </div>
           <div style={s.headerActions}>
             <button style={s.btnGhost} onClick={() => navigate(`/patient/${id}/edit`)}>✏ Modifier</button>
-            <button style={s.btnQR} onClick={() => setShowQR(true)}>📲 QR Code</button>
+           
           </div>
         </div>
       </div>
@@ -887,7 +903,13 @@ export default function PatientDossier() {
             </div>
 
             <div style={s.colStack}>
-              <SectionCard title="Informations du formulaire patient" icon="📋" action={<button style={s.seeMoreBtn} onClick={() => setShowQR(true)}>📲 QR Code →</button>}>
+              {/* ── Section Formulaire Patient (réponses QR) ── */}
+              <SectionCard title="Informations du formulaire patient" icon="📋"
+                action={
+                  <button style={s.seeMoreBtn} onClick={() => setShowQR(true)}>
+                    📲 QR Code →
+                  </button>
+                }>
                 <FormSubmissionsSection patientId={patient.id} />
               </SectionCard>
 
@@ -949,16 +971,17 @@ const s = {
   breadcrumbSep: { color: '#C5D0E8' },
   breadcrumbCurrent: { color: '#1A2B4A', fontWeight: 700 },
   headerActions: { display: 'flex', gap: 10, alignItems: 'center' },
-  btnQR: { padding: '9px 18px', borderRadius: 30, border: 'none', background: 'linear-gradient(135deg,#6366f1,#8b5cf6)', color: '#fff', fontSize: 13, fontWeight: 800, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 },
+   // ← زر QR في الهيدر — ستايل خاص
+  btnQR: { padding: '9px 18px', borderRadius: 30, border: 'none', background: 'linear-gradient(135deg,#6366f1,#8b5cf6)', color: '#fff', fontSize: 13, fontWeight: 800, cursor: 'pointer', fontFamily: "'Nunito', sans-serif", boxShadow: '0 4px 14px rgba(99,102,241,0.35)', display: 'flex', alignItems: 'center', gap: 6 },
   heroSection: { maxWidth: 1080, margin: '24px auto 0', padding: '0 28px' },
-  heroCard: { background: '#fff', borderRadius: 16, border: '1px solid #E8EDF5', padding: '24px 28px', display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 24 },
+  heroCard: { background: '#fff', borderRadius: 16, border: '1px solid #E8EDF5', padding: '24px 28px', display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 24, boxShadow: '0 2px 12px rgba(74,108,247,0.06)' },
   heroLeft: { display: 'flex', alignItems: 'flex-start', gap: 18, flex: 1 },
-  avatar: { width: 64, height: 64, borderRadius: 16, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, fontWeight: 800, flexShrink: 0 },
+  avatar: { width: 64, height: 64, borderRadius: 16, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, fontWeight: 800, flexShrink: 0, fontFamily: "'Poppins', sans-serif" },
   heroInfo: { flex: 1 },
   heroName: { fontFamily: "'Poppins', sans-serif", fontWeight: 800, fontSize: 22, color: '#1A2B4A', margin: '0 0 8px' },
   heroMeta: { display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 10 },
   heroBadge: { padding: '3px 12px', borderRadius: 20, fontSize: 12, fontWeight: 700, background: '#F0F4FF', color: '#4A6CF7', border: '1px solid rgba(74,108,247,0.15)' },
-  dossierId: { fontFamily: "'Poppins', sans-serif", letterSpacing: '0.5px', background: '#1A2B4A', color: '#fff' },
+  dossierId: { fontFamily: "'Poppins', sans-serif", letterSpacing: '0.5px', background: '#1A2B4A', color: '#fff', border: 'none' },
   heroTags: { display: 'flex', flexWrap: 'wrap', gap: 8 },
   heroTag: { padding: '4px 12px', borderRadius: 8, fontSize: 13, fontWeight: 700, background: '#F5F8FF', color: '#1A2B4A', border: '1px solid #DDE4F3' },
   tnmTag: { padding: '4px 12px', borderRadius: 8, fontSize: 12, fontWeight: 800, background: '#EEF2FF', color: '#4A6CF7' },
@@ -969,6 +992,15 @@ const s = {
   rdvNone: { fontSize: 12, color: '#C5D0E8', fontWeight: 600 },
   stadeBadge: { padding: '3px 10px', borderRadius: 20, fontSize: 12, fontWeight: 800 },
   emptyBadge: { color: '#C5D0E8', fontSize: 12 },
+  // Dans l'objet const s = { ... }
+  btnQR: {
+  display: 'flex', alignItems: 'center', gap: 6,
+  padding: '9px 18px', borderRadius: 30, border: 'none',
+  background: 'linear-gradient(135deg,#4A6CF7,#7c3aed)',
+  color: '#fff', fontSize: 13, fontWeight: 800,
+  cursor: 'pointer', fontFamily: "'Nunito', sans-serif",
+  boxShadow: '0 4px 14px rgba(74,108,247,0.3)',
+  },
   statsRow: { maxWidth: 1080, margin: '16px auto 0', padding: '0 28px', display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12 },
   statCard: { background: '#fff', borderRadius: 12, border: '1px solid #E8EDF5', padding: '16px 18px', boxShadow: '0 1px 4px rgba(0,0,0,0.04)' },
   statValue: { fontFamily: "'Poppins', sans-serif", fontWeight: 800, fontSize: 24, marginBottom: 2 },

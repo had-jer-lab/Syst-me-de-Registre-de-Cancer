@@ -1,44 +1,12 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { QRCodeSVG } from 'qrcode.react';
+// QR généré via API externe — aucune dépendance npm
+function getQRImgUrl(text, size) {
+  return `https://api.qrserver.com/v1/create-qr-code/?size=${size}x${size}&data=${encodeURIComponent(text)}&color=1e1b4b&bgcolor=ffffff&qzone=2&format=png`;
+}
 
 const API = process.env.REACT_APP_API_URL
-  || `http://${window.location.hostname}:8000/api`;
-
-function getFrontendOrigin() {
-  if (process.env.REACT_APP_FRONTEND_URL) return process.env.REACT_APP_FRONTEND_URL;
-  const host = window.location.hostname;
-  if (host === 'localhost' || host === '127.0.0.1') {
-    return `http://${host}:${window.location.port}`;
-  }
-  return window.location.origin;
-}
-
-function detectLocalHostOrigin(timeout = 2000) {
-  return new Promise((resolve) => {
-    try {
-      const RTCPeerConnection = window.RTCPeerConnection || window.webkitRTCPeerConnection || window.mozRTCPeerConnection;
-      if (!RTCPeerConnection) return resolve(null);
-      const pc = new RTCPeerConnection({ iceServers: [] });
-      let done = false;
-      pc.createDataChannel('');
-      pc.createOffer().then(offer => pc.setLocalDescription(offer)).catch(() => {});
-      pc.onicecandidate = (e) => {
-        if (!e || !e.candidate || !e.candidate.candidate || done) return;
-        const ipMatch = e.candidate.candidate.match(/([0-9]{1,3}(?:\.[0-9]{1,3}){3})/);
-        if (ipMatch) {
-          const candidateIp = ipMatch[1];
-          if (/^(10\.|192\.168\.|172\.(1[6-9]|2[0-9]|3[0-1])\.)/.test(candidateIp)) {
-            done = true;
-            try { pc.close(); } catch {}
-            resolve(`http://${candidateIp}:${window.location.port}`);
-          }
-        }
-      };
-      setTimeout(() => { if (!done) { try { pc.close(); } catch {} resolve(null); } }, timeout);
-    } catch { resolve(null); }
-  });
-}
-
+    || `http://192.168.1.9:8000/api`;
+    
 const DEFAULT_FIELDS = [
   { key: 'telephone',   label: 'Téléphone',              type: 'tel',      required: false },
   { key: 'wilaya',      label: 'Wilaya',                  type: 'text',     required: false },
@@ -63,42 +31,26 @@ export default function PatientQRSection({ patientId, patientName, dossier, moda
   const [loading,     setLoading]     = useState(false);
   const [copied,      setCopied]      = useState(false);
   const [expanded,    setExpanded]    = useState(modalMode);
-  const [showPrint,   setShowPrint]   = useState(modalMode);
+  const [showPrint,   setShowPrint]   = useState(false); // s'ouvre après génération du QR
   const [submissions, setSubmissions] = useState([]);
   const [loadingSubs, setLoadingSubs] = useState(false);
   const printRef = useRef(null);
 
   const token = localStorage.getItem('access_token');
 
-  const [frontendOrigin, setFrontendOrigin] = useState(getFrontendOrigin());
-
-  useEffect(() => {
-    if ((frontendOrigin.startsWith('http://localhost') || frontendOrigin.startsWith('http://127.0.0.1')) && !process.env.REACT_APP_FRONTEND_URL) {
-      detectLocalHostOrigin().then(origin => {
-        if (origin) setFrontendOrigin(origin);
-      }).catch(() => {});
-    }
-  }, [frontendOrigin]);
-
-  const dossierUrl = `${frontendOrigin}/#/patient-public/${patientId}?token=${btoa(dossier || String(patientId))}`;
-
   const generateQR = async () => {
     setLoading(true);
     try {
+      const FRONTEND = process.env.REACT_APP_FRONTEND_URL
+        || `http://${window.location.hostname}:3000`;
       const res = await fetch(`${API}/patients/${patientId}/generate-form-token/`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ frontend_url: frontendOrigin, fields: DEFAULT_FIELDS }),
+        body: JSON.stringify({ frontend_url: FRONTEND, fields: DEFAULT_FIELDS }),
       });
       const data = await res.json();
-      if (data.form_url) {
-        let formUrl = data.form_url;
-        if (!formUrl.includes('/#/patient-form/')) {
-          formUrl = formUrl.replace('/patient-form/', '/#/patient-form/');
-        }
-        data.form_url = formUrl;
-      }
       setQrData(data);
+      if (data?.form_url) setShowPrint(true); // ouvre le modal dès que le QR est prêt
     } catch (e) { console.error('QR gen error:', e); }
     setLoading(false);
   };
@@ -119,13 +71,13 @@ export default function PatientQRSection({ patientId, patientName, dossier, moda
     if (expanded) { generateQR(); loadSubmissions(); }
   }, [expanded, patientId]);
 
-  const copyLink = (link) => {
-    if (!link) return;
+  const copyLink = () => {
+    if (!qrData?.form_url) return;
     if (navigator.clipboard) {
-      navigator.clipboard.writeText(link);
+      navigator.clipboard.writeText(qrData.form_url);
     } else {
       const el = document.createElement('textarea');
-      el.value = link;
+      el.value = qrData.form_url;
       document.body.appendChild(el);
       el.select();
       document.execCommand('copy');
@@ -197,7 +149,7 @@ export default function PatientQRSection({ patientId, patientName, dossier, moda
         </div>
         <div className="qr-wrap">
           {qrData && (
-            <QRCodeSVG value={qrData.form_url} size={180} level="H" fgColor="#1e1b4b" />
+            <img src={getQRImgUrl(qrData.form_url, 180)} alt="QR" width={180} height={180} style={{ borderRadius:8 }} />
           )}
         </div>
         <div className="name">{patientName || '—'}</div>
@@ -209,7 +161,8 @@ export default function PatientQRSection({ patientId, patientName, dossier, moda
 
   return (
     <>
-      <div style={s.wrap}>
+      {/* Vue inline — cachée en modalMode */}
+      <div style={{ ...s.wrap, display: modalMode ? 'none' : undefined }}>
         <div style={s.header} onClick={() => setExpanded(e => !e)}>
           <div style={s.title}>
             <div style={s.icon}>📲</div>
@@ -230,14 +183,7 @@ export default function PatientQRSection({ patientId, patientName, dossier, moda
                 {/* QR Code */}
                 <div style={s.qrBox}>
                   <div style={s.qrWrap}>
-                    <QRCodeSVG
-                      id="patient-qr-svg"
-                      value={qrData.form_url}
-                      size={148}
-                      level="H"
-                      includeMargin={false}
-                      fgColor="#1e1b4b"
-                    />
+                    <img src={getQRImgUrl(qrData.form_url, 148)} alt="QR" width={148} height={148} style={{ borderRadius:8, display:"block" }} />
                   </div>
                   <div style={s.btnRow}>
                     <button style={s.btn('#6366f1')} onClick={() => setShowPrint(true)}>🖨 Imprimer</button>
@@ -317,7 +263,7 @@ export default function PatientQRSection({ patientId, patientName, dossier, moda
               </div>
               {/* QR */}
               <div style={{ display:'inline-block', padding:10, background:'#fff', borderRadius:14, border:'2px solid #e0e7ff', marginBottom:12 }}>
-                <QRCodeSVG value={qrData.form_url} size={180} level="H" fgColor="#1e1b4b" />
+                <img src={getQRImgUrl(qrData.form_url, 180)} alt="QR" width={180} height={180} style={{ borderRadius:8 }} />
               </div>
               {/* Infos */}
               <div style={{ fontWeight:800, fontSize:17, color:'#1e293b', marginBottom:4 }}>{patientName || '—'}</div>

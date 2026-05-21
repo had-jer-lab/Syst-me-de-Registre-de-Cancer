@@ -29,6 +29,12 @@ class UserSerializer(serializers.ModelSerializer):
     def get_permissions(self, obj):
         return obj.permissions_list
 
+    def validate(self, data):
+        # Require password on create, but not on update
+        if self.instance is None and not data.get('password'):
+            raise serializers.ValidationError({'password': 'Le mot de passe est obligatoire'})
+        return data
+
     def create(self, validated_data):
         request = self.context.get('request')
         password = validated_data.pop('password', None)
@@ -77,26 +83,6 @@ class LoginSerializer(serializers.Serializer):
         
         data['user'] = user
         return data
-
-
-class UserSerializer(serializers.ModelSerializer):
-    """Sérialiseur pour le modèle User"""
-    full_name = serializers.SerializerMethodField()
-
-    def get_full_name(self, obj):
-        return f"{obj.prenom or ''} {obj.nom or ''}".strip() or obj.email
-
-    class Meta:
-        model = User
-        fields = [
-            'id', 'email', 'nom', 'prenom', 'full_name',
-            'role', 'specialite', 'telephone',
-            'etablissement', 'wilaya', 'statut',
-            'perm_read', 'perm_write', 'perm_rcp',
-            'perm_lab', 'perm_stats', 'perm_import',
-            'is_active', 'is_staff', 'created_at',
-        ]
-        read_only_fields = ['id', 'created_at']
 
 
 class LoginLogSerializer(serializers.ModelSerializer):

@@ -394,7 +394,27 @@ class PatientDetailSerializer(serializers.ModelSerializer):
         if obj.created_by:
             return f"Dr. {obj.created_by.prenom} {obj.created_by.nom}"
         return '—'
-
+    def _resolve_commune(self, validated_data):
+        commune_text = validated_data.pop('commune_text', None)
+        wilaya_text  = validated_data.pop('wilaya_text', None)
+        if commune_text and not validated_data.get('commune'):
+            commune = None
+            if wilaya_text:
+                wilaya = Wilaya.objects.filter(name__iexact=wilaya_text).first()
+                if not wilaya:
+                    wilaya = Wilaya.objects.create(name=wilaya_text)
+                commune = Commune.objects.filter(name__iexact=commune_text, wilaya=wilaya).first()
+                if not commune:
+                    commune = Commune.objects.create(name=commune_text, wilaya=wilaya)
+            else:
+                commune = Commune.objects.filter(name__iexact=commune_text).first()
+            if commune:
+                validated_data['commune'] = commune
+        # Si pas de commune FK → sauvegarder wilaya_text comme fallback
+        if not validated_data.get('commune') and wilaya_text:
+            validated_data['wilaya_text'] = wilaya_text
+        return validated_data
+    
     def get_habits(self, obj):
         return [h.habit.name for h in obj.habits.all()]
 
@@ -405,6 +425,12 @@ class PatientDetailSerializer(serializers.ModelSerializer):
         validated_data = self._resolve_commune(validated_data)
         validated_data['created_by'] = self.context['request'].user
         return super().create(validated_data)
+    
+    def update(self, instance, validated_data):
+        validated_data = self._resolve_commune(validated_data)
+        return super().update(instance, validated_data)
+
+    
 
 
 # ─── Cancer (create/update) ────────────────────────────────────────────────
