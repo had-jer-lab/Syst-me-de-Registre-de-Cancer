@@ -1,9 +1,11 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Eye, EyeOff, Lock, Mail, Heart, Database, FileText, Users, AlertCircle } from 'lucide-react';
+import { usePatient } from '../context/PatientContext';
 
 export default function AuthPage() {
   const navigate = useNavigate();
+  const { reset } = usePatient();
   const [form, setForm]           = useState({ email: '', password: '' });
   const [showPassword, setShowPwd] = useState(false);
   const [isLoading, setIsLoading]  = useState(false);
@@ -42,6 +44,9 @@ export default function AuthPage() {
         localStorage.setItem('access_token',  data.access);
         localStorage.setItem('refresh_token', data.refresh);
         localStorage.setItem('user',          JSON.stringify(data.user));
+
+        // Reset patient form state before redirection
+        reset();
 
         // Redirection selon le rôle (vient de Django)
         navigate(data.route);

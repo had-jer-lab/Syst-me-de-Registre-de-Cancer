@@ -22,9 +22,14 @@ User = get_user_model()
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def mes_patients(request):
-    patients = Patient.objects.filter(
-        created_by=request.user
-    ).order_by('-created_at')
+    # Admin sees all patients; regular users see theirs + shared patients
+    user = request.user
+    if user.is_staff or getattr(user, 'role', '') == 'admin':
+        patients = Patient.objects.filter(deleted_at__isnull=True).order_by('-created_at')
+    else:
+        # For now, let users see all patients for RCP selection
+        # (could be enhanced with shared/team logic later)
+        patients = Patient.objects.filter(deleted_at__isnull=True).order_by('-created_at')
 
     data = []
     for p in patients:

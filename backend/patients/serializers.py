@@ -442,29 +442,28 @@ class PatientDetailSerializer(serializers.ModelSerializer):
     def get_risk_factors(self, obj):
         return [r.risk_factor.name for r in obj.risk_factors.all()]
 
+    def _resolve_commune(self, validated_data):
+        # If the client already provided a commune FK, keep it.
+        if validated_data.get('commune'):
+            return validated_data
+
+        commune_name = validated_data.pop('commune_name', None)
+        wilaya_name = validated_data.pop('wilaya', None)
+        if not commune_name:
+            return validated_data
+
+        qs = Commune.objects.all()
+        if wilaya_name:
+            qs = qs.filter(wilaya__name__iexact=wilaya_name)
+        commune = qs.filter(name__iexact=commune_name).first()
+        if commune:
+            validated_data['commune'] = commune
+        return validated_data
+
     def create(self, validated_data):
         validated_data = self._resolve_commune(validated_data)
         validated_data['created_by'] = self.context['request'].user
         return super().create(validated_data)
-
-
-# ─── Cancer (create/update) ────────────────────────────────────────────────
-
-class CancerCreateSerializer(serializers.ModelSerializer):
-    class Meta:
-        model  = Cancer
-        fields = [
-            'id', 'patient', 'cancer_type',
-            'stade_clinique', 'stade_pathologique', 'tnm', 'grade',
-            'date_diagnostic', 'data_source',
-        ]
-
-    def validate_patient(self, patient):
-        # Seul le médecin référent peut ajouter un cancer
-        request = self.context.get('request')
-        if request and patient.created_by != request.user and not request.user.is_staff:
-            raise serializers.ValidationError("Accès refusé à ce patient.")
-        return patient
 
 
 # ─── Death ────────────────────────────────────────────────────────────────────

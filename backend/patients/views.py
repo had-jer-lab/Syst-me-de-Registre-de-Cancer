@@ -4,6 +4,9 @@
 from rest_framework import generics, permissions, filters, status
 from rest_framework.views import APIView
 from rest_framework.response import Response
+from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
+from rest_framework.decorators import api_view, permission_classes
+from django.shortcuts import get_object_or_404
 from base64 import b64decode
 from django_filters.rest_framework import DjangoFilterBackend
 from .models import (
@@ -225,6 +228,31 @@ class PatientDetailView(generics.RetrieveUpdateDestroyAPIView):
         instance.save()
 
 
+class VoiceParseView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+
+    def post(self, request):
+        transcript = request.data.get('transcript', '')
+        if not isinstance(transcript, str):
+            return Response({'error': 'transcript is required'}, status=status.HTTP_400_BAD_REQUEST)
+        return Response({})
+
+
+class WhisperParseView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+    parser_classes = [MultiPartParser, FormParser]
+
+    def post(self, request):
+        audio_file = request.FILES.get('audio')
+        transcript = ''
+        if not audio_file:
+            return Response({'error': 'audio file is required'}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Placeholder backend endpoint. If you want real transcription,
+        # integrate Whisper/Groq here and return parsed `fields` + `transcript`.
+        return Response({'fields': {}, 'transcript': transcript})
+
+
 # ─── Stats rapides pour le dashboard ─────────────────────────────────────────
 
 class DashboardStatsView(APIView):
@@ -433,6 +461,42 @@ class ConsultationListCreateView(generics.ListCreateAPIView):
             patient_id=self.kwargs.get('patient_pk'),
             user=self.request.user,
         )
+
+
+@api_view(['POST'])
+@permission_classes([permissions.IsAuthenticated])
+def create_patient_habit(request, patient_pk):
+    """Lightweight endpoint used by frontend to record simple habits.
+    Expects JSON: { habit_name: 'tabac', frequency: 'quotidien', duration_years: 5 }
+    If habit does not exist it will be created.
+    """
+    from .models import Habit, PatientHabit
+    user = request.user
+    patient = get_object_or_404(Patient, id=patient_pk)
+    # permission: staff or owner
+    if not (user.is_staff or getattr(user, 'role', '') == 'admin' or patient.created_by == user):
+        return Response({'detail': 'Accès refusé.'}, status=403)
+
+    data = request.data or {}
+    habit_name = data.get('habit_name') or data.get('habit')
+    if not habit_name:
+        return Response({'detail': 'habit_name requis.'}, status=400)
+
+    habit_obj = Habit.objects.filter(name__iexact=habit_name).first()
+    if not habit_obj:
+        habit_obj = Habit.objects.create(name=habit_name)
+
+    ph, created = PatientHabit.objects.get_or_create(patient=patient, habit=habit_obj)
+    freq = data.get('frequency') or data.get('valeur')
+    if freq:
+        ph.frequency = str(freq)
+    if data.get('duration_years'):
+        try:
+            ph.duration_years = int(data.get('duration_years'))
+        except Exception:
+            pass
+    ph.save()
+    return Response({'id': ph.id, 'habit': habit_obj.name, 'frequency': ph.frequency}, status=201 if created else 200)
 
 
 

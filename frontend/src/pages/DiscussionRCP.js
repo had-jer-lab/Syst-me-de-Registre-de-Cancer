@@ -410,7 +410,13 @@ export default function DiscussionRCP() {
 
   // ── Chargements initiaux ───────────────────────────────────────────────────
   const loadPatients    = useCallback(async () => {
-    try { const d = await apiFetch('rcp/mes-patients/'); if (d) setPatients(d); } catch {}
+    try { 
+      const d = await apiFetch('rcp/mes-patients/');
+      console.log('📋 Patients loaded:', d);
+      if (d) setPatients(d); 
+    } catch (err) {
+      console.error('❌ Error loading patients:', err);
+    }
   }, []);
   const loadRcpHistory  = useCallback(async () => {
     try { const d = await apiFetch('rcp/history/'); if (d) setRcpList(d); } catch {}

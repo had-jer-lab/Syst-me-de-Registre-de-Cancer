@@ -30,48 +30,33 @@ function normalizeTypeTumeur(value) {
 }
 
 function score(arr, total) {
-  // count any value that is not undefined/null and not just whitespace
-  // (including "0" which JS treats as falsy).
   const filled = arr.filter(v => {
     if (v === null || v === undefined) return false;
     const s = v.toString();
     return s.trim() !== '';
   }).length;
-  // protect against bad totals
   if (!total) return 0;
   return Math.round((filled / total) * 100);
 }
 
-// normalize patient object to match modal/duplication helpers
 function normalizePatient(p) {
-  // ── Cancers ───────────────────────────────────────────────────────────────
-  // Detail endpoint  → p.cancers = [{cancer_type_name, stade_clinique, treatments:[...]}]
-  // List  endpoint   → p.dernier_cancer = {organe, stade} (résumé du dernier cancer)
-  // Form context     → p.cancers already array of strings or undefined
   const rawCancers = Array.isArray(p.cancers) ? p.cancers : [];
-
-  // Helper: clean dash placeholder from backend
   const cleanDash = (v) => (!v || v === '—' || v === '-') ? '' : v;
 
   const cancers = rawCancers.length > 0
     ? rawCancers.map(c => {
         if (typeof c === 'string') return c;
-        // Detail API: {cancer_type_name, stade_clinique}
-        // cancer_type_name is '' when cancer_type FK is null in DB
         const name  = cleanDash(c.cancer_type_name)
           || (typeof c.cancer_type === 'string' ? cleanDash(c.cancer_type) : '')
           || cleanDash(c.organe) || cleanDash(c.name) || '';
         const stade = cleanDash(c.stade_clinique || c.stade_pathologique || c.stade || '');
         if (!name && !stade) return null;
-        // If no name but stade exists → meaningful label
         const label = name
           ? (stade ? name + ' (Stade ' + stade + ')' : name)
           : (stade ? 'Cancer Stade ' + stade : null);
         return label;
       }).filter(Boolean)
     : (() => {
-        // Fallback A: dernier_cancer from list serializer
-        // Backend returns '—' (dash) when cancer_type is null
         const dc = p.dernier_cancer;
         if (dc) {
           const name  = cleanDash(dc.organe || dc.cancer_type_name || dc.name || '');
@@ -81,30 +66,22 @@ function normalizePatient(p) {
             : (stade ? 'Cancer Stade ' + stade : '');
           if (label.trim()) return [label];
         }
-        // Fallback B: PatientContext form data (data.organe + data.stade)
         const organe = cleanDash(p.organe || '');
         const stade  = cleanDash(p.stade  || '');
         if (organe) return [stade ? organe + ' (Stade ' + stade + ')' : organe];
         return [];
       })();
 
-  // ── Traitements ───────────────────────────────────────────────────────────
-  // Detail API: nested c.treatments = [{type_traitement, protocole}]
   const nestedTrt = rawCancers.flatMap(c =>
     typeof c === 'object' && Array.isArray(c.treatments) ? c.treatments : []
   );
   const rawTrt = Array.isArray(p.traitements) ? p.traitements : [];
-  // Fallback: PatientContext form fields trtAnt / trtActuel
   const formTrt = [p.trtAnt, p.trtActuel].filter(Boolean);
   const traitements = [...rawTrt, ...nestedTrt, ...formTrt].map(t => {
     if (typeof t === 'string') return cleanDash(t);
     return cleanDash(t.type_traitement || t.protocole || t.name || '');
   }).filter(Boolean);
 
-  // ── Geo ───────────────────────────────────────────────────────────────────
-  // PatientDetailSerializer:  wilaya_name = commune.wilaya.name
-  // PatientListSerializer:    wilaya_name = commune.wilaya.name  (same)
-  // PatientContext form:      wilaya is a string (name chosen by user)
   const wilaya = cleanDash(
     p.wilaya_name
     || (p.commune && typeof p.commune === 'object' && p.commune.wilaya
@@ -134,12 +111,10 @@ function normalizePatient(p) {
     cancers,
     traitements,
     age:  p.age  || '',
-    // Format cree date — remove ISO noise
-    cree: fmtDate(cleanDash(p.created_at || p.cree || '')),
+    cree: fmtDate((p.created_at || p.cree || '').replace('—','')),
   };
 }
 
-// ── Fuzzy similarity helpers (same logic as DuplicateDetectionModal) ────────
 function normStr(s = '') {
   return s.toString().normalize('NFD').replace(/\p{Diacritic}/gu, '').trim().toLowerCase();
 }
@@ -173,7 +148,6 @@ function dateSim(d1, d2) {
   } catch { return 0; }
 }
 
-// compute similarity percentage between two normalized patients (weighted)
 function computeSimilarity(a, b) {
   const fields = [
     { name: 'nin',           weight: 3, fn: (v1, v2) => normStr(v1) === normStr(v2) ? 100 : 0 },
@@ -187,21 +161,19 @@ function computeSimilarity(a, b) {
     }},
     { name: 'wilaya',        weight: 1, fn: strSim },
   ];
-  let totalWeight = 0, score = 0;
+  let totalWeight = 0, scoreVal = 0;
   fields.forEach((f) => {
     totalWeight += f.weight;
     const va = a[f.name], vb = b[f.name];
-    if (va && vb) score += f.fn(va, vb) * f.weight;
+    if (va && vb) scoreVal += f.fn(va, vb) * f.weight;
   });
   if (totalWeight === 0) return 0;
-  return Math.round(score / totalWeight);
+  return Math.round(scoreVal / totalWeight);
 }
 
-// search for similar existing patient; returns {existing, score} if one >50%
 async function findPossibleDuplicate(candidate, token) {
   try {
     const q = encodeURIComponent(candidate.nom || '');
-    // Search list (lightweight)
     const res = await fetch(`http://localhost:8000/api/patients/?search=${q}`, {
       headers: { Authorization: `Bearer ${token}` },
     });
@@ -209,7 +181,6 @@ async function findPossibleDuplicate(candidate, token) {
     const data = await res.json();
     const list = data.results || data;
 
-    // Find best match by score
     let bestRaw = null, bestScore = 0;
     list.forEach((raw) => {
       const ex = normalizePatient(raw);
@@ -218,7 +189,6 @@ async function findPossibleDuplicate(candidate, token) {
     });
     if (bestScore <= 50 || !bestRaw) return null;
 
-    // Fetch full detail to get cancers + treatments nested
     try {
       const detailRes = await fetch(`http://localhost:8000/api/patients/${bestRaw.id}/`, {
         headers: { Authorization: `Bearer ${token}` },
@@ -229,7 +199,6 @@ async function findPossibleDuplicate(candidate, token) {
       }
     } catch (_) {}
 
-    // Fallback to list version
     return { existing: normalizePatient(bestRaw), score: bestScore };
   } catch (e) {
     console.warn('duplicate lookup failed', e);
@@ -276,184 +245,342 @@ export default function Page5() {
   const navigate = useNavigate();
   const { data, update } = usePatient();
   const [checks, setChecks]       = useState({ c1: false, c2: false, c3: false });
-  const [unchecked, setUnchecked] = useState([]);
-  const [unc, setUnc] = useState([]);
+  const [unc, setUnc]             = useState([]);
   const [showSuccess, setShowSuccess] = useState(false);
-  const [merged, setMerged] = useState(false); // indicates if we updated existing
+  const [merged, setMerged]       = useState(false);
   const [saving, setSaving]       = useState(false);
   const [saveError, setSaveError] = useState('');
-  const [error, setError]         = useState('');
-  const [saveStep, setSaveStep]   = useState(0);
   const [createdDossier, setCreatedDossier] = useState('');
+  const [duplicateModal, setDuplicateModal] = useState(null);
 
-  // Compute scores
-  const s1 = score([data.nom, data.prenom, data.dob, data.tel, data.sexe, data.wilaya, data.couverture], 7);
-  const s2 = score([data.typeT, data.organe, data.histo, data.stade, data.taille, data.diagDate], 6);
+  const API = 'http://localhost:8000/api';
+
+  const s1 = score([data.first_name, data.last_name, data.date_naissance, data.phone, data.sexe, data.wilaya, data.couverture_sociale], 7);
+  const s2 = score([data.type_tumeur, data.organe, data.type_histologique, data.stade_clinique, data.taille_tumorale, data.date_diagnostic], 6);
   const s3 = score([data.cea, data.ca199, data.nfs, data.biopsy, data.como], 5);
   const s4 = score([data.tabac, data.alcool, data.sport, data.poids, data.antFam, data.trtAnt], 6);
   const global = Math.round((s1 + s2 + s3 + s4) / 4);
 
-  const fullName = `${data.prenom || '—'} ${data.nom || '—'}`;
+  const fullName = `${data.first_name || data.prenom || '—'} ${data.last_name || data.nom || '—'}`;
 
   const toggleCheck = (key) => setChecks(prev => ({ ...prev, [key]: !prev[key] }));
 
-  // Duplicate modal state
-  const [duplicateModal, setDuplicateModal] = useState(null);
-  const API = 'http://localhost:8000/api';
-  const covLabels = { cnss: 'CNSS', rss: 'RSS', prive: 'Privé', aucune: 'Aucune' };
+  const covLabels = { cnas: 'CNAS', casnos: 'CASNOS', pmsr: 'PMSR', aucune: 'Aucune', autre: 'Autre' };
   const famLabels = { celibataire: 'Célibataire', marie: 'Marié(e)', veuf: 'Veuf(ve)', divorce: 'Divorcé(e)' };
 
   function buildCandidate() {
     return normalizePatient({
       ...data,
-      first_name: data.prenom || data.first_name || '',
-      last_name: data.nom || data.last_name || '',
+      first_name: data.first_name || data.prenom || '',
+      last_name:  data.last_name  || data.nom    || '',
     });
   }
 
-  // helper that performs the actual creation (called after duplicate check / confirm)
-  async function createPatientAndCancer(patientPayload, token, skipDuplicateCheck = false) {
-    try {
-      const patRes = await fetch('http://localhost:8000/api/patients/', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify(patientPayload),
-      });
+  // ─── Créer patient + cancer + traitements + examens ──────────────────────
 
-      if (!patRes.ok) {
-        const err = await patRes.json();
-        console.error('Erreur patient:', err);
+  async function createFullDossier(token, overrideNin = undefined) {
+    // ── 1. Patient ──────────────────────────────────────────────────────────
+    const sexeVal = data.sexe === 'M' || data.sexe === 'Masculin' ? 'M' : 'F';
 
-        // Detect NIN duplicate — French ("existe déjà") OR English ("already exists")
-        const errMsg = JSON.stringify(err).toLowerCase();
-        const isNINDuplicate = !skipDuplicateCheck && (
-          errMsg.includes('national_id') ||
-          errMsg.includes('existe') ||
-          errMsg.includes('exist') ||
-          errMsg.includes('déjà') ||
-          errMsg.includes('deja') ||
-          errMsg.includes('unique')
-        );
+    const patientPayload = {
+      // Identité
+      first_name:          data.first_name     || data.prenom || '',
+      last_name:           data.last_name      || data.nom    || '',
+      date_naissance:      data.date_naissance || data.dob    || '',
+      sexe:                sexeVal,
+      phone:               data.phone          || data.tel    || '',
+      national_id:         overrideNin !== undefined ? overrideNin : (data.national_id || data.nin || null),
+      // Localisation
+      commune:             data.commune_id     || null,
+      hospital:            data.hospital_id    || null,
+      // Situation
+      situation_familiale: data.situation_familiale || '',
+      couverture_sociale:  data.couverture_sociale  || '',
+      // Santé
+      poids:               data.poids          ? parseFloat(data.poids) : null,
+      taille:              data.taille_patient ? parseFloat(data.taille_patient) : null,
+      // Professionnel
+      profession:          data.profession     || '',
+      // Notes
+      observations:        data.observations   || '',
+      allergies:           data.allergies      || '',
+      autres_allergies:    data.autresAllergies|| '',
+      // Antécédents familiaux
+      antecedents_fam_yn:  data.antFam         || '',
+      antecedents_familiaux: (data.antecedents || []).filter(a => a && a.trim()),
+      // Données
+      data_source: 'manual',
+    };
 
-        if (isNINDuplicate && patientPayload.national_id) {
-          // Always try to open the modal — never show raw error for NIN conflict
-          try {
-            const existingRes = await fetch(
-              `http://localhost:8000/api/patients/?national_id=${encodeURIComponent(patientPayload.national_id)}`,
-              { headers: { Authorization: `Bearer ${token}` } }
-            );
-            if (existingRes.ok) {
-              const existingData = await existingRes.json();
-              const existingRaw = existingData.results?.[0] || existingData[0];
-              if (existingRaw) {
-                let fullExisting = existingRaw;
-                try {
-                  const detailRes = await fetch(
-                    `http://localhost:8000/api/patients/${existingRaw.id}/`,
-                    { headers: { Authorization: `Bearer ${token}` } }
-                  );
-                  if (detailRes.ok) fullExisting = await detailRes.json();
-                } catch (_) {}
+    const patRes = await fetch(`${API}/patients/`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify(patientPayload),
+    });
 
-                const existing = normalizePatient(fullExisting);
-                const candidate = normalizePatient({
-                  ...data,
-                  first_name: data.prenom || data.first_name || '',
-                  last_name:  data.nom    || data.last_name  || '',
+    if (!patRes.ok) {
+      const err = await patRes.json();
+      const errMsg = JSON.stringify(err).toLowerCase();
+      const isNINDuplicate = (
+        errMsg.includes('national_id') ||
+        errMsg.includes('existe') ||
+        errMsg.includes('exist') ||
+        errMsg.includes('unique')
+      ) && patientPayload.national_id;
+
+      if (isNINDuplicate) {
+        // Chercher le patient existant et ouvrir le modal doublon
+        try {
+          const searchRes = await fetch(
+            `${API}/patients/?national_id=${encodeURIComponent(patientPayload.national_id)}`,
+            { headers: { Authorization: `Bearer ${token}` } }
+          );
+          if (searchRes.ok) {
+            const searchData = await searchRes.json();
+            const existingRaw = searchData.results?.[0] || searchData[0];
+            if (existingRaw) {
+              let fullExisting = existingRaw;
+              try {
+                const detailRes = await fetch(`${API}/patients/${existingRaw.id}/`, {
+                  headers: { Authorization: `Bearer ${token}` },
                 });
-                setDuplicateModal({ existing, candidate });
-                return null;  // stop here — modal handles the rest
-              }
+                if (detailRes.ok) fullExisting = await detailRes.json();
+              } catch (_) {}
+              const existing  = normalizePatient(fullExisting);
+              const candidate = normalizePatient({ ...data, first_name: data.first_name||data.prenom||'', last_name: data.last_name||data.nom||'' });
+              setDuplicateModal({ existing, candidate });
+              return null;
             }
-          } catch (fetchErr) {
-            console.warn('Could not fetch existing patient:', fetchErr);
           }
-          // If fetch failed, show friendly message instead of raw error
-          setSaveError('Un patient avec ce NIN existe déjà. Veuillez vérifier.');
-          return null;
-        }
-
-        // Other errors (date, validation, etc.)
-        const msg = err.date_naissance?.[0] || err.detail || Object.values(err).flat()[0] || JSON.stringify(err);
-        setSaveError('Erreur : ' + msg);
+        } catch (_) {}
+        setSaveError('Un patient avec ce NIN existe déjà.');
         return null;
       }
 
-      const patient = await patRes.json();
-      setCreatedDossier(patient.numero_dossier || '');
-
-      // create cancer if applicable
-      if (data.organe) {
-        const cancerPayload = {
-          patient:         patient.id,
-          stade_clinique:  data.stade    || '',
-          tnm:             [data.tnmT, data.tnmN, data.tnmM].filter(Boolean).join(''),
-          grade:           data.grade    || '',
-          date_diagnostic: data.diagDate || null,
-          custom_fields:   data.customFields || {},
-        };
-
-        await fetch(`http://localhost:8000/api/patients/${patient.id}/cancers/`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${token}`,
-          },
-          body: JSON.stringify(cancerPayload),
-        });
-      }
-
-      return patient;
-    } catch (e) {
-      console.error(e);
-      setSaveError('Erreur réseau. Vérifiez que le serveur Django est lancé.');
+      const msg = err.date_naissance?.[0] || err.detail || Object.values(err).flat()[0] || JSON.stringify(err);
+      setSaveError('Erreur patient : ' + msg);
       return null;
     }
-  }
 
-  // ── SAVE — envoie vraiment les données au backend (avec contrôle doublon) ──
-  const handleSave = async () => {
-    const missing=Object.entries(checks).filter(([,v])=>!v).map(([k])=>k);
-    if (missing.length){setUnc(missing);setTimeout(()=>setUnc([]),2000);return;}
+    const patient = await patRes.json();
+    setCreatedDossier(patient.numero_dossier || '');
 
-    setSaving(true); setError(''); setSaveStep(0);
-    const token=localStorage.getItem('access_token');
-    if (!token){setError('Session expirée.');setSaving(false);return;}
+    // ── 2. Cancer ───────────────────────────────────────────────────────────
+    const tnm = [data.tnmT, data.tnmN, data.tnmM].filter(Boolean).join('');
 
-    try {
-      const frontErrs=[];
-      if (!data.last_name?.trim())  frontErrs.push('Nom manquant');
-      if (!data.first_name?.trim()) frontErrs.push('Prénom manquant');
-      if (!data.date_naissance)     frontErrs.push('Date de naissance manquante');
-      if (!data.sexe)               frontErrs.push('Sexe manquant');
-      if (frontErrs.length){setError('Données incomplètes : '+frontErrs.join(', ')+'. Vérifiez la page 1.');setSaving(false);return;}
+    const cancerPayload = {
+      patient:             patient.id,
+      // Organe (texte libre → CancerType créé côté backend)
+      organe:              data.organe          || '',
+      cancer_type:         data.cancer_type_id  || null,
+      // Localisation
+      type_tumeur:         normalizeTypeTumeur(data.type_tumeur || data.typeT || ''),
+      sous_type:           data.sous_type        || '',
+      lateralite:          data.lateralite || data.lat || '',
+      cim10_code:          data.cim10_code === '__manual__'
+                             ? (data.cim10_manual || '')
+                             : (data.cim10_code || ''),
+      // Histologie
+      type_histologique:   data.type_histologique || data.histo || '',
+      grade_histologique:  data.grade_histologique || data.grade || '',
+      bloc_anapath:        data.bloc_anapath       || '',
+      // TNM & Stade
+      stade_clinique:      data.stade_clinique  || data.stade || '',
+      stade_pathologique:  data.stade_pathologique || '',
+      tnm:                 tnm,
+      // Données tumorales
+      taille_tumorale:     data.taille_tumorale || data.taille
+                             ? parseFloat(data.taille_tumorale || data.taille) || null : null,
+      ganglions_envahis:   data.ganglions_envahis
+                             ? parseInt(data.ganglions_envahis) || null : null,
+      // Statut
+      localise:            data.localise  !== undefined ? data.localise  : true,
+      metastatique:        data.metastatique !== undefined ? data.metastatique : false,
+      recidive:            data.recidive   !== undefined ? data.recidive   : false,
+      sites_metastatiques: data.sites_metastatiques || [],
+      // Récepteurs hormonaux
+      recepteur_er:        data.recepteur_er || '',
+      recepteur_pr:        data.recepteur_pr || '',
+      her2:                data.her2         || '',
+      // Dates
+      date_symptomes:      data.date_symptomes   || null,
+      date_diagnostic:     data.date_diagnostic  || data.diagDate || null,
+      // Établissement
+      etablissement_diag:  data.etablissement_diag || '',
+      service_diag:        data.service_diag || data.service || '',
+      medecin_diag:        data.medecin_diag || data.medecin || '',
+      // Base de diagnostic
+      base_diagnostic:     data.base_diagnostic || [],
+      // Champs personnalisés
+      custom_fields:       data.customFields    || {},
+      // Source
+      data_source: 'manual',
+    };
 
-      const candidate=buildCandidate();
+    const cancerRes = await fetch(`${API}/patients/${patient.id}/cancers/`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify(cancerPayload),
+    });
 
-      const dup=await findPossibleDuplicate(candidate,token);
-      if (dup){
-        setDuplicateModal({existing:dup.existing,candidate});
-        setSaving(false);
-        return;
+    let cancer = null;
+    if (cancerRes.ok) {
+      cancer = await cancerRes.json();
+    } else {
+      const err = await cancerRes.json().catch(() => ({}));
+      console.warn('Cancer creation warning:', err);
+    }
+
+    // ── 3. Traitements (Page6) ──────────────────────────────────────────────
+    if (cancer && Array.isArray(data.traitements) && data.traitements.length > 0) {
+      for (const t of data.traitements) {
+        const tPayload = {
+          type_traitement:      t.type_traitement      || 'chimio',
+          intention:            t.intention            || '',
+          statut:               t.statut               || 'planifie',
+          ligne:                t.ligne                || '',
+          protocole:            t.protocole            || '',
+          medicaments:          t.medicaments          || '',
+          voie_administration:  t.voie_administration  || '',
+          jours_administration: Array.isArray(t.jours_administration)
+                                  ? t.jours_administration : [],
+          cycles_prevus:        t.cycles_prevus    ? parseInt(t.cycles_prevus)   || null : null,
+          cycles_realises:      t.cycles_realises  ? parseInt(t.cycles_realises) || null : null,
+          date_debut:           t.date_debut       || null,
+          date_fin:             t.date_fin         || null,
+          reponse_tumorale:     t.reponse_tumorale || '',
+          date_evaluation:      t.date_evaluation  || null,
+          grade_toxicite:       t.grade_toxicite   || '',
+          description_toxicite: t.description_toxicite || '',
+        };
+        await fetch(`${API}/patients/${patient.id}/cancers/${cancer.id}/treatments/`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+          body: JSON.stringify(tPayload),
+        }).catch(e => console.warn('Treatment save warning:', e));
+      }
+    }
+
+    // ── 4. Examens biologiques (Page3) ──────────────────────────────────────
+    if (cancer) {
+      const MARQUEURS = [
+        { key: 'cea',   label: 'CEA' },
+        { key: 'ca199', label: 'CA 19-9' },
+        { key: 'ca125', label: 'CA 125' },
+        { key: 'afp',   label: 'AFP' },
+        { key: 'psa',   label: 'PSA' },
+        { key: 'ca153', label: 'CA 15-3' },
+        { key: 'nfs',   label: 'NFS' },
+        { key: 'creat', label: 'Créatinine' },
+        { key: 'ggt',   label: 'GGT' },
+        { key: 'ldh',   label: 'LDH' },
+        { key: 'hb',    label: 'Hémoglobine' },
+        { key: 'tp',    label: 'TP' },
+      ];
+
+      for (const m of MARQUEURS) {
+        const val = data[m.key];
+        if (val !== undefined && val !== null && val !== '') {
+          const bioPayload = {
+            type_analyse: m.label,
+            valeur:       isNaN(parseFloat(val)) ? null : parseFloat(val),
+            resultat:     isNaN(parseFloat(val)) ? String(val) : '',
+            date_analyse: null,
+          };
+          await fetch(`${API}/patients/${patient.id}/cancers/${cancer.id}/biological-exams/`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+            body: JSON.stringify(bioPayload),
+          }).catch(e => console.warn('Bio exam warning:', e));
+        }
       }
 
-      const patientPayload = {
-        first_name:     data.prenom        || '',
-        last_name:      data.nom           || '',
-        date_naissance: data.dob           || '',
-        sexe:           data.sexe?.includes('Masculin') ? 'M' : 'F',
-        phone:          data.tel           || '',
-        national_id:    data.nin           || null,
-        data_source:    'manual',
-      };
-      // commune is free-text in form, not a FK integer — don't send to backend
+      // ── 5. Imagerie (Page3) ───────────────────────────────────────────────
+      if (Array.isArray(data.imagerie) && data.imagerie.length > 0) {
+        for (const img of data.imagerie) {
+          await fetch(`${API}/patients/${patient.id}/cancers/${cancer.id}/imaging-exams/`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+            body: JSON.stringify({ type_examen: img, conclusion: '', date_examen: null }),
+          }).catch(e => console.warn('Imaging exam warning:', e));
+        }
+      }
 
-      // Try to create the patient
-      // If a duplicate is detected (national_id exists), the function will show the modal and return null
-      const created = await createPatientAndCancer(patientPayload, token);
+      // ── 6. Métastases ─────────────────────────────────────────────────────
+      if (Array.isArray(data.sites_metastatiques) && data.sites_metastatiques.length > 0) {
+        for (const site of data.sites_metastatiques) {
+          await fetch(`${API}/patients/${patient.id}/cancers/${cancer.id}/metastases/`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+            body: JSON.stringify({ organe: site, date_detection: null }),
+          }).catch(e => console.warn('Metastasis warning:', e));
+        }
+      }
+    }
+
+    // ── 7. Habitudes de vie (Page4) ─────────────────────────────────────────
+    const habitudesMap = {
+      tabac:  data.tabac,
+      alcool: data.alcool,
+      sport:  data.sport,
+    };
+    for (const [nom, val] of Object.entries(habitudesMap)) {
+      if (val) {
+        // Chercher ou créer le habit, puis PatientHabit
+        await fetch(`${API}/patients/${patient.id}/habits/`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+          body: JSON.stringify({ habit_name: nom, valeur: val, frequency: val }),
+        }).catch(() => {}); // endpoint optionnel
+      }
+    }
+
+    // ── 8. Consultation initiale si date renseignée ─────────────────────────
+    if (data.consultDate) {
+      await fetch(`${API}/patients/${patient.id}/consultations/`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({
+          consultation_date: toISODate(data.consultDate),
+          motif:             'Consultation initiale',
+          compte_rendu:      data.observations || '',
+          next_visit_date:   toISODate(data.dernier_rdv) || null,
+        }),
+      }).catch(e => console.warn('Consultation warning:', e));
+    }
+
+    return patient;
+  }
+
+  // ─── SAVE principal ────────────────────────────────────────────────────────
+  const handleSave = async () => {
+    const missing = Object.entries(checks).filter(([,v]) => !v).map(([k]) => k);
+    if (missing.length) { setUnc(missing); setTimeout(() => setUnc([]), 2000); return; }
+
+    setSaving(true); setSaveError('');
+    const token = localStorage.getItem('access_token');
+    if (!token) { setSaveError('Session expirée.'); setSaving(false); return; }
+
+    try {
+      const frontErrs = [];
+      if (!(data.first_name || data.prenom)?.trim()) frontErrs.push('Prénom manquant');
+      if (!(data.last_name  || data.nom)?.trim())    frontErrs.push('Nom manquant');
+      if (!data.date_naissance && !data.dob)          frontErrs.push('Date de naissance manquante');
+      if (!data.sexe)                                  frontErrs.push('Sexe manquant');
+      if (frontErrs.length) {
+        setSaveError('Données incomplètes : ' + frontErrs.join(', ') + '. Vérifiez la page 1.');
+        setSaving(false); return;
+      }
+
+      // Vérifier doublon
+      const candidate = buildCandidate();
+      const dup = await findPossibleDuplicate(candidate, token);
+      if (dup) {
+        setDuplicateModal({ existing: dup.existing, candidate });
+        setSaving(false); return;
+      }
+
+      const created = await createFullDossier(token);
       if (created) setShowSuccess(true);
 
     } catch (err) {
@@ -464,14 +591,9 @@ export default function Page5() {
     }
   };
 
-  // Handler when modal confirm: proceed with creation (force)
-  // helper to update an existing patient based on fusion data
-  async function mergePatientAndCancer(existingId, fusionData, token, candidateData) {
-    // ── 1. PATCH patient fields ───────────────────────────────────────────────
+  // ─── Fusion doublon ────────────────────────────────────────────────────────
+  async function mergePatientAndCancer(existingId, fusionData, token) {
     const nameParts = (fusionData.nom || '').trim().split(' ');
-    // Only send fields that don't require FK lookup
-    // commune requires integer PK — skip it to avoid 400 error
-    // (commune stays as-is on existing patient)
     const payload = {
       first_name:     nameParts[0] || '',
       last_name:      nameParts.slice(1).join(' ') || '',
@@ -479,132 +601,54 @@ export default function Page5() {
       phone:          fusionData.telephone || '',
     };
 
-    // commune is a free-text field in the form (not an FK integer)
-    // → never send it in PATCH to avoid 400 "attendait clé primaire" error
-
-    console.log('[PATCH] payload:', JSON.stringify(payload));
-    console.log('[PATCH] to patient id:', existingId);
-    const res = await fetch(`http://localhost:8000/api/patients/${existingId}/`, {
+    const res = await fetch(`${API}/patients/${existingId}/`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
       body: JSON.stringify(payload),
     });
-    if (!res.ok) {
-      const err = await res.json();
-      console.error('[PATCH] FAILED:', err);
-      throw new Error(JSON.stringify(err));
-    }
-    console.log('[PATCH] SUCCESS status:', res.status);
-    const updatedPatient = await res.json();
-
-    // ── 2. Merge cancers — fetch existing, add missing ────────────────────────
-    if (fusionData.cancers && fusionData.cancers.length > 0) {
-      try {
-        const cRes = await fetch(`http://localhost:8000/api/patients/${existingId}/cancers/`,
-          { headers: { Authorization: `Bearer ${token}` } });
-        if (cRes.ok) {
-          const existingCancers = await cRes.json();
-          // Existing cancer names (normalized)
-          const existingNames = existingCancers.map(c =>
-            (c.cancer_type_name || '').toLowerCase().trim()
-          );
-          for (const label of fusionData.cancers) {
-            // label may be "Leucémie (Stade II)" — extract name part
-            const namePart = label.replace(/\s*\(.*\)$/, '').toLowerCase().trim();
-            if (existingNames.includes(namePart)) continue; // already exists
-
-            // Find matching CancerType id from candidateData raw cancers
-            const matchRaw = (candidateData?._rawCancers || []).find(c => {
-              const n = (c.cancer_type_name || c.organe || '').toLowerCase().trim();
-              return n === namePart;
-            });
-            if (matchRaw?.cancer_type) {
-              await fetch(`http://localhost:8000/api/patients/${existingId}/cancers/`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-                body: JSON.stringify({
-                  cancer_type:     matchRaw.cancer_type,
-                  stade_clinique:  matchRaw.stade_clinique || '',
-                  tnm:             matchRaw.tnm || '',
-                  grade:           matchRaw.grade || '',
-                  date_diagnostic: matchRaw.date_diagnostic || null,
-                }),
-              });
-            }
-          }
-        }
-      } catch(e) { console.warn('Cancer merge warning:', e); }
-    }
-
-    return updatedPatient;
+    if (!res.ok) { const err = await res.json(); throw new Error(JSON.stringify(err)); }
+    return await res.json();
   }
 
-  // ── Helper: convert DD/MM/YYYY → YYYY-MM-DD for API ─────────────────────────
   function toISODate(str) {
     if (!str) return '';
-    // Already ISO
     if (/^\d{4}-\d{2}-\d{2}/.test(str)) return str.split('T')[0];
-    // DD/MM/YYYY
     const m = str.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
     if (m) return `${m[3]}-${m[2].padStart(2,'0')}-${m[1].padStart(2,'0')}`;
     return str;
   }
 
-  // action: 'fusionner' | 'garder_separe'
   const handleModalConfirm = async (fusionData, note, existingId, action = 'fusionner') => {
-    // Save modal data BEFORE closing (duplicateModal will be null after)
     const savedModal = duplicateModal;
     setDuplicateModal(null);
 
-    if (action==='garder_separe') {
-      setSaving(true); setError('');
+    if (action === 'garder_separe') {
+      setSaving(true); setSaveError('');
       try {
-        const token=localStorage.getItem('access_token');
-        if (!token){setError('Session expirée.');setSaving(false);return;}
-        const origNin=data.national_id;
-        update({national_id:null});
-        await createFullDossier(token);
-        update({national_id:origNin});
-        setMerged(false);
-          setShowSuccess(true);
-      } catch(e){setError('Erreur réseau.');}
-      finally{setSaving(false);}
+        const token = localStorage.getItem('access_token');
+        if (!token) { setSaveError('Session expirée.'); setSaving(false); return; }
+        // Créer sans NIN pour éviter le conflit
+        const created = await createFullDossier(token, null);
+        if (created) { setMerged(false); setShowSuccess(true); }
+      } catch(e) { setSaveError('Erreur réseau.'); }
+      finally { setSaving(false); }
       return;
     }
 
-    async function createFullDossier(token) {
-      // Placeholder helper for modal action « garder séparé ».
-      // Implement full dossier creation if needed, or keep as a no-op for now.
-      return null;
-    }
-
-    setSaving(true); setError('');
+    setSaving(true); setSaveError('');
     try {
-      const token=localStorage.getItem('access_token');
-      if (!token){setError('Session expirée.');setSaving(false);return;}
-      const fusionDataFixed={...fusionData,dateNaissance:toISODate(fusionData.dateNaissance)};
-      const updated=await mergePatientAndCancer(existingId,fusionDataFixed,token);
+      const token = localStorage.getItem('access_token');
+      if (!token) { setSaveError('Session expirée.'); setSaving(false); return; }
+      const fusionDataFixed = { ...fusionData, dateNaissance: toISODate(fusionData.dateNaissance) };
+      const updated = await mergePatientAndCancer(existingId, fusionDataFixed, token);
       if (updated) {
         setMerged(true);
-        const nameParts=(fusionDataFixed.nom||'').trim().split(' ');
-        update({
-          first_name: nameParts[0]||data.first_name,
-          last_name:  nameParts.slice(1).join(' ')||data.last_name,
-          date_naissance: fusionDataFixed.dateNaissance||data.date_naissance,
-          phone: fusionDataFixed.telephone||data.phone,
-        });
-        const candidateId=savedModal?.candidate?.id;
-        if (candidateId&&candidateId!==existingId) {
-          await fetch(`${API}/patients/${candidateId}/`,{
-            method:'DELETE',headers:{Authorization:`Bearer ${token}`},
-          }).catch(()=>{});
-        }
-        setCreatedDossier(updated.numero_dossier||updated.id||'');
-          setShowSuccess(true);
+        setCreatedDossier(updated.numero_dossier || updated.id || '');
+        setShowSuccess(true);
       }
-    } catch(e){
-      setError('Erreur lors de la fusion : '+e.message);
-    } finally {setSaving(false);}
+    } catch(e) {
+      setSaveError('Erreur lors de la fusion : ' + e.message);
+    } finally { setSaving(false); }
   };
 
   return (
@@ -621,23 +665,30 @@ export default function Page5() {
             {createdDossier && <div className="suc-num">{createdDossier}</div>}
             <div style={{ display: 'flex', gap: 10, justifyContent: 'center', flexWrap: 'wrap' }}>
               <button className="btn btn-ghost" onClick={() => {
-                // Reset form et retourner page1
                 update({
-                  nom: '', prenom: '', dob: '', age: '', nin: '',
-                  tel: '', email: '', sexe: '', famille: '',
-                  wilaya: '', commune: '', adresse: '', couverture: '', profession: '',
-                  typeT: '', organe: '', lat: '', topo: '', stade: '',
+                  first_name: '', last_name: '', date_naissance: '', dob: '', age: '',
+                  national_id: '', nin: '', phone: '', tel: '', email: '',
+                  sexe: '', situation_familiale: '', couverture_sociale: '',
+                  wilaya: '', commune: '', commune_id: null, hospital_id: null,
+                  profession: '', adresse: '', poids: '', taille_patient: '',
+                  organe: '', cancer_type_id: null, sous_type: '', type_tumeur: '',
+                  lateralite: '', cim10_code: '', stade_clinique: '', stade: '',
                   tnmT: 'T0', tnmN: 'N0', tnmM: 'M0',
                   localise: true, metastatique: false, recidive: false,
-                  diagDate: '', consultDate: '', histo: '', grade: '',
-                  taille: '', recepteurs: '', service: '', medecin: '',
-                  trtActuel: '', dernier_rdv: '', sous_type: '',
+                  sites_metastatiques: [], recepteur_er: '', recepteur_pr: '', her2: '',
+                  date_symptomes: '', date_diagnostic: '', diagDate: '',
+                  type_histologique: '', grade_histologique: '', bloc_anapath: '',
+                  etablissement_diag: '', service_diag: '', medecin_diag: '',
+                  base_diagnostic: [],
+                  traitements: [], imagerie: [], customFields: {},
+                  tabac: '', alcool: '', sport: '', antFam: '',
+                  antecedents: [''], allergies: '', observations: '',
                 });
                 navigate('/page1');
               }}>
                 ➕ Nouveau patient
               </button>
-              <button className="btn btn-primary" onClick={()=>navigate('/dashboard')}>
+              <button className="btn btn-primary" onClick={() => navigate('/dashboard')}>
                 📋 Voir mes patients
               </button>
             </div>
@@ -663,12 +714,12 @@ export default function Page5() {
           <div>
             <div className="sum-name">{fullName}</div>
             <div className="sum-meta-grid">
-              <div className="sum-meta-item">Naissance : <b>{fmtDate(data.date_naissance)}</b></div>
-              <div className="sum-meta-item">NIN : <b>{data.national_id||'—'}</b></div>
-              <div className="sum-meta-item">Tél : <b>{data.phone||'—'}</b></div>
-              <div className="sum-meta-item">Couverture : <b>{covLabels[data.couverture_sociale]||'—'}</b></div>
-              <div className="sum-meta-item">Situation : <b>{famLabels[data.situation_familiale]||'—'}</b></div>
-              <div className="sum-meta-item">Email : <b>{data.email||'—'}</b></div>
+              <div className="sum-meta-item">Naissance : <b>{fmtDate(data.date_naissance || data.dob)}</b></div>
+              <div className="sum-meta-item">NIN : <b>{data.national_id || data.nin || '—'}</b></div>
+              <div className="sum-meta-item">Tél : <b>{data.phone || data.tel || '—'}</b></div>
+              <div className="sum-meta-item">Couverture : <b>{covLabels[data.couverture_sociale] || '—'}</b></div>
+              <div className="sum-meta-item">Situation : <b>{famLabels[data.situation_familiale] || '—'}</b></div>
+              <div className="sum-meta-item">Wilaya : <b>{data.wilaya || '—'}</b></div>
             </div>
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 8 }}>
@@ -687,19 +738,40 @@ export default function Page5() {
             </div>
             <div className="section-block-body">
               <div className="info-grid">
-                <InfoItem label="Type de tumeur" value={data.typeT} />
-                <InfoItem label="Organe" value={data.organe} />
-                <InfoItem label="Sous-type" value={data.sous_type} />
-                <InfoItem label="Histologie" value={data.histo} />
-                <InfoItem label="Stade" value={data.stade ? 'Stade ' + data.stade : ''} />
-                <InfoItem label="TNM" value={[data.tnmT, data.tnmN, data.tnmM].filter(Boolean).join(' – ')} />
-                <InfoItem label="Taille tumorale" value={data.taille} unit=" cm" />
-                <InfoItem label="Récepteurs" value={data.recepteurs} />
-                <InfoItem label="Date diagnostic" value={data.diagDate ? fmtDate(data.diagDate) : ''} />
-                <InfoItem label="Dernier RDV" value={data.dernier_rdv ? fmtDate(data.dernier_rdv) : ''} />
+                <InfoItem label="Type de tumeur"   value={data.type_tumeur || data.typeT} />
+                <InfoItem label="Organe"            value={data.organe} />
+                <InfoItem label="Sous-type"         value={data.sous_type} />
+                <InfoItem label="Histologie"        value={data.type_histologique || data.histo} />
+                <InfoItem label="Stade"             value={data.stade_clinique || data.stade ? 'Stade ' + (data.stade_clinique || data.stade) : ''} />
+                <InfoItem label="TNM"               value={[data.tnmT, data.tnmN, data.tnmM].filter(Boolean).join(' – ')} />
+                <InfoItem label="Taille tumorale"   value={data.taille_tumorale || data.taille} unit=" cm" />
+                <InfoItem label="Récepteurs ER/PR"  value={data.recepteur_er ? `ER:${data.recepteur_er} PR:${data.recepteur_pr}` : ''} />
+                <InfoItem label="HER2"              value={data.her2} />
+                <InfoItem label="Date diagnostic"   value={data.date_diagnostic || data.diagDate ? fmtDate(data.date_diagnostic || data.diagDate) : ''} />
+                <InfoItem label="Établissement"     value={data.etablissement_diag} />
+                <InfoItem label="Médecin diag."     value={data.medecin_diag || data.medecin} />
               </div>
             </div>
           </div>
+
+          {/* Traitements */}
+          {(data.traitements || []).length > 0 && (
+            <div className="section-block">
+              <div className="section-block-header">
+                <div className="section-block-title"><span>💊</span> Traitements ({data.traitements.length})</div>
+                <button className="d-link" onClick={() => navigate('/page6')}>Modifier ↗</button>
+              </div>
+              <div className="section-block-body">
+                {data.traitements.map((t, i) => (
+                  <div key={i} style={{ padding: '8px 0', borderBottom: '1px solid #F0F4FF', fontSize: 13 }}>
+                    <strong>{t.type_traitement}</strong>
+                    {t.protocole && ` — ${t.protocole}`}
+                    {t.statut && <span style={{ marginLeft: 8, color: '#7A8BAD' }}>({t.statut})</span>}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* Biologique */}
           <div className="section-block">
@@ -709,12 +781,12 @@ export default function Page5() {
             </div>
             <div className="section-block-body">
               <div className="info-grid">
-                <InfoItem label="CEA" value={data.cea} unit=" ng/mL" />
-                <InfoItem label="CA 19-9" value={data.ca199} unit=" U/mL" />
-                <InfoItem label="PSA" value={data.psa} unit=" ng/mL" />
-                <InfoItem label="Biopsie" value={data.biopsy} />
+                <InfoItem label="CEA"       value={data.cea}   unit=" ng/mL" />
+                <InfoItem label="CA 19-9"   value={data.ca199} unit=" U/mL" />
+                <InfoItem label="PSA"       value={data.psa}   unit=" ng/mL" />
+                <InfoItem label="Biopsie"   value={data.biopsy} />
                 <InfoItem label="Comorbidités" value={data.como} />
-                <InfoItem label="Imagerie" value={(data.imagerie || []).join(', ')} />
+                <InfoItem label="Imagerie"  value={(data.imagerie || []).join(', ')} />
               </div>
             </div>
           </div>
@@ -724,13 +796,12 @@ export default function Page5() {
             <CompletionBar label="Infos personnelles" pct={s1} />
             <CompletionBar label="Diagnostic & Cancer" pct={s2} />
             <CompletionBar label="Données biologiques" pct={s3} />
-            <CompletionBar label="Habitudes de vie" pct={s4} />
+            <CompletionBar label="Habitudes de vie"    pct={s4} />
           </SC>
         </div>
 
         {/* RIGHT */}
         <div className="col-stack">
-
           {/* Habitudes */}
           <div className="section-block">
             <div className="section-block-header">
@@ -739,20 +810,16 @@ export default function Page5() {
             </div>
             <div className="section-block-body">
               <div className="info-grid">
-                <InfoItem label="Tabagisme" value={data.tabac} />
-                <InfoItem label="Alcool" value={data.alcool} />
+                <InfoItem label="Tabagisme"        value={data.tabac} />
+                <InfoItem label="Alcool"            value={data.alcool} />
                 <InfoItem label="Activité physique" value={data.sport} />
-                <InfoItem label="IMC" value={data.imc ? parseFloat(data.imc).toFixed(1) : ''} />
-                <InfoItem label="Poids" value={data.poids} unit=" kg" />
-                <InfoItem label="Alimentation" value={data.alim} />
+                <InfoItem label="IMC"               value={data.imc ? parseFloat(data.imc).toFixed(1) : ''} />
+                <InfoItem label="Poids"             value={data.poids} unit=" kg" />
+                <InfoItem label="Alimentation"      value={data.alim} />
               </div>
               <div style={{ marginTop: 12 }}>
                 <div className="info-key" style={{ marginBottom: 6 }}>Antécédents familiaux</div>
                 <div className={`info-val ${!data.antFam ? 'empty' : ''}`}>{data.antFam || 'Non renseigné'}</div>
-              </div>
-              <div style={{ marginTop: 12 }}>
-                <div className="info-key" style={{ marginBottom: 6 }}>Traitements antérieurs</div>
-                <div className={`info-val ${!data.trtAnt ? 'empty' : ''}`}>{data.trtAnt || 'Non renseigné'}</div>
               </div>
               <div style={{ marginTop: 12 }}>
                 <div className="info-key" style={{ marginBottom: 6 }}>Allergies</div>
@@ -782,7 +849,7 @@ export default function Page5() {
               { key: 'c2', text: 'Le patient ou son représentant légal a donné son consentement à l\'enregistrement de ces données.' },
               { key: 'c3', text: 'Ces données seront traitées conformément à la réglementation en vigueur sur la confidentialité médicale.' },
             ].map(({ key, text }) => (
-              <div key={key} className={`confirm-check ${unchecked.includes(key) ? 'unchecked' : ''}`}>
+              <div key={key} className={`confirm-check ${unc.includes(key) ? 'unchecked' : ''}`}>
                 <input type="checkbox" checked={checks[key]} onChange={() => toggleCheck(key)} />
                 <span>{text}</span>
               </div>
@@ -792,19 +859,19 @@ export default function Page5() {
       </div>
 
       <BtnRow
-        onBack={()=>navigate('/page4')}
+        onBack={() => navigate('/page4')}
         onNext={handleSave}
         nextLabel={saving ? '⏳ Enregistrement…' : '✓ Enregistrer le patient'}
         nextClass="btn-success"
       />
 
-      {duplicateModal&&(
+      {duplicateModal && (
         <DuplicateDetectionModal
           patientExistant={duplicateModal.existing}
           patientNouveau={duplicateModal.candidate}
-          onClose={()=>setDuplicateModal(null)}
-          onConfirm={(fusionData,note,existingId,action)=>
-            handleModalConfirm(fusionData,note,existingId,action)
+          onClose={() => setDuplicateModal(null)}
+          onConfirm={(fusionData, note, existingId, action) =>
+            handleModalConfirm(fusionData, note, existingId, action)
           }
         />
       )}

@@ -11,8 +11,10 @@ from .views import (
     CancerListCreateView, CancerDetailView,
     TreatmentListCreateView, TreatmentDetailView,
     ConsultationListCreateView,
+     create_patient_habit,
     DemandeExamenListCreateView,
     DemandeExamenDetailView,
+    VoiceParseView, WhisperParseView,
     AllDemandesView,
 )
 
@@ -27,6 +29,8 @@ urlpatterns = [
 
     # ── Dashboard ─────────────────────────────────────────────────────────────
     path('stats/',         DashboardStatsView.as_view(), name='dashboard-stats'),
+    path('voice-parse/',   VoiceParseView.as_view(),    name='voice-parse'),
+    path('whisper-parse/', WhisperParseView.as_view(),  name='whisper-parse'),
 
     # ── Patients ──────────────────────────────────────────────────────────────
     path('',               PatientListCreateView.as_view(), name='patients'),
@@ -46,6 +50,8 @@ urlpatterns = [
     # ── Consultations (nested sous patient) ───────────────────────────────────
     path('<int:patient_pk>/consultations/',
          ConsultationListCreateView.as_view(), name='patient-consultations'),
+    path('<int:patient_pk>/habits/',
+         create_patient_habit, name='patient-habits'),
 
     # ── Demandes par patient ──────────────────────────────────────────────────
     path('<int:patient_pk>/demandes/',

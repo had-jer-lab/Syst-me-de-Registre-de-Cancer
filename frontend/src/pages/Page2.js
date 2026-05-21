@@ -66,8 +66,13 @@ const CIM10_LIST = [
   {code:'C64',label:'C64 — Rein'},{code:'C67',label:'C67 — Vessie'},
   {code:'C81',label:'C81 — Hodgkin'},{code:'C91',label:'C91 — Leucémie lymphoïde'},
   {code:'C43',label:'C43 — Mélanome'},{code:'C71',label:'C71 — Cerveau'},
-];
-
+];const CIM10_TO_ORGANE = {
+  C50: 'Sein', C34: 'Poumon', C18: 'Côlon / Rectum', C61: 'Prostate',
+  C53: "Col de l'utérus", C73: 'Thyroïde', C22: 'Foie / Voies biliaires', C16: 'Estomac',
+  C25: 'Pancréas', C56: 'Ovaire', C64: 'Rein', C67: 'Vessie',
+  C81: 'Lymphome', C91: 'Leucémie', C43: 'Mélanome cutané', C71: 'Cerveau / SNC',
+};
+const ORGANE_TO_CIM10 = Object.fromEntries(Object.entries(CIM10_TO_ORGANE).map(([code, organe]) => [organe, code]));
 /* ─── Composants UI ──────────────────────────────────────────────────────── */
 
 function SectionBlock({ label, color = '#4A6CF7', children }) {
@@ -213,6 +218,43 @@ export default function Page2() {
   const up  = (k) => (v) => update({ [k]: v });
   const upE = (k) => (e) => update({ [k]: e.target.value });
 
+  const updateField = (key, value) => {
+    if (key === 'organe') {
+      update({
+        organe: value,
+        sous_type: '',
+        cim10_code: ORGANE_TO_CIM10[value] || '',
+        cim10_manual: ORGANE_TO_CIM10[value] ? '' : data.cim10_manual,
+      });
+      return;
+    }
+    if (key === 'cim10_code') {
+      if (value === '__manual__') {
+        update({ cim10_code: value });
+        return;
+      }
+      update({
+        cim10_code: value,
+        cim10_manual: '',
+        organe: CIM10_TO_ORGANE[value] || data.organe,
+      });
+      return;
+    }
+    if (key === 'cim10_manual') {
+      update({ cim10_manual: value, cim10_code: '__manual__' });
+      return;
+    }
+    if (['localise','metastatique','recidive'].includes(key)) {
+      update({
+        localise: key === 'localise' ? value : false,
+        metastatique: key === 'metastatique' ? value : false,
+        recidive: key === 'recidive' ? value : false,
+      });
+      return;
+    }
+    update({ [key]: value });
+  };
+
   const sousTypes   = data.organe ? (SOUS_TYPES[data.organe] || ['Autre']) : [];
   const isTripleNeg = data.recepteur_er==='negatif' && data.recepteur_pr==='negatif' && data.her2==='negatif';
 
@@ -233,7 +275,7 @@ export default function Page2() {
                 options={ORGANES}
                 placeholder="Sélectionner l'organe…"
                 value={data.organe}
-                onChange={v => update({ organe: v, sous_type: '' })}
+                onChange={v => updateField('organe', v)}
               />
             </F>
 
@@ -273,7 +315,7 @@ export default function Page2() {
                   <select
                     style={s.select}
                     value={data.cim10_code || ''}
-                    onChange={upE('cim10_code')}
+                    onChange={e => updateField('cim10_code', e.target.value)}
                   >
                     <option value="">Sélectionner…</option>
                     {CIM10_LIST.map(c => <option key={c.code} value={c.code}>{c.label}</option>)}
@@ -283,7 +325,7 @@ export default function Page2() {
                 </div>
                 {data.cim10_code === '__manual__' && (
                   <input style={{ ...s.input, width:110 }} placeholder="ex: C79.1"
-                    value={data.cim10_manual||''} onChange={upE('cim10_manual')} />
+                    value={data.cim10_manual||''} onChange={e => updateField('cim10_manual', e.target.value)} />
                 )}
               </div>
             </F>
@@ -376,9 +418,9 @@ export default function Page2() {
 
             <F label="Statut" mt={12}>
               <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
-                <Toggle label="Localisé"     checked={!!data.localise}     onChange={up('localise')} />
-                <Toggle label="Métastatique" checked={!!data.metastatique} onChange={up('metastatique')} />
-                <Toggle label="Récidive"     checked={!!data.recidive}     onChange={up('recidive')} />
+                <Toggle label="Localisé"     checked={!!data.localise}     onChange={v => updateField('localise', v)} />
+                <Toggle label="Métastatique" checked={!!data.metastatique} onChange={v => updateField('metastatique', v)} />
+                <Toggle label="Récidive"     checked={!!data.recidive}     onChange={v => updateField('recidive', v)} />
               </div>
             </F>
 

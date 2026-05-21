@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom'; // ✅ useLocation ajouté
+import { usePatient } from '../context/PatientContext';
 import NotificationBell from '../components/NotificationBell';
 
 // ─── API helper ───────────────────────────────────────────────────────────────
@@ -120,6 +121,8 @@ export default function Dashboard() {
     }
   };
 
+  const { reset } = usePatient();
+
   const handleNavClick = (id) => {
     setActiveNav(id);
     if (id === 'rcp')    navigate('/rcp');
@@ -132,6 +135,7 @@ export default function Dashboard() {
       await apiFetch('/auth/logout/', { method: 'POST' });
     } catch { /* ignore */ }
     localStorage.clear();
+    reset();
     navigate('/auth');
   };
 
