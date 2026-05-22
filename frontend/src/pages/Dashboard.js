@@ -2,9 +2,10 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom'; // ✅ useLocation ajouté
 import { usePatient } from '../context/PatientContext';
 import NotificationBell from '../components/NotificationBell';
+import { API_BASE_URL } from '../utils/apiConfig';
 
 // ─── API helper ───────────────────────────────────────────────────────────────
-const API = 'http://localhost:8000/api';
+const API = API_BASE_URL;
 
 async function apiFetch(path, options = {}) {
   const token = localStorage.getItem('access_token');

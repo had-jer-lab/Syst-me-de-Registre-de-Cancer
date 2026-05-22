@@ -1,9 +1,10 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import CustomFieldsPage from './CustomFieldsPage';
+import { API_BASE_URL } from '../utils/apiConfig';
 
 // ─── API Helper ───────────────────────────────────────────────────────────────
-const API = 'http://localhost:8000/api/auth';
+const API = API_BASE_URL;
 const WILAYAS_COMMUNES = {
   'Adrar':['Timekten','Bouda','Ouled Ahmed Timmi','Adrar','Fenoughil','In Zghmir','Reggane','Sali','Sebaa','Tsabit','Tamest','Tamantit','Tit','Zaouiet Kounta','Akabli','Aoulef'],
   'Chlef':['Talassa','Zeboudja','El Hadjadj','Ouled Ben Abdelkader','Ain Merane','Breira','Ouled Abbes','Oued Fodda','Beni Rached','Herenfa','Tadjena','El Marsa','Chlef','Oum Drou','Sendjas','Sidi Abderrahmane','Sidi Akkacha','Tenes','Beni  Bouattab','El Karimia','Harchoun','Bouzeghaia','Taougrit','Beni Haoua','Abou El Hassane','Oued Goussine','Chettia','Moussadek','Ouled Fares','Boukadir','Oued Sly','Sobha','Benairia','Labiod Medjadja','Dahra'],

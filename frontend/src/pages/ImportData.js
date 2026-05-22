@@ -2,9 +2,10 @@ import React, { useState, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import * as XLSX from 'xlsx';
 import DuplicateDetectionModal from '../components/DuplicateDetectionModal';
+import { API_BASE_URL } from '../utils/apiConfig';
 
 // ── API helper ────────────────────────────────────────────────────────────────
-const API = 'http://localhost:8000/api';
+const API = API_BASE_URL;
 
 // Get valid token — refresh if expired using stored credentials
 async function getValidToken() {
@@ -25,13 +26,10 @@ async function getValidToken() {
   const refresh = localStorage.getItem('refresh_token');
   if (refresh) {
     // Find refresh URL by trying login endpoint variations
-    const BASE = 'http://localhost:8000';
     const REFRESH_URLS = [
-      `${BASE}/api/token/refresh/`,
-      `${BASE}/api/auth/token/refresh/`,
-      `${BASE}/api/accounts/token/refresh/`,
-      `${BASE}/auth/token/refresh/`,
-      `${BASE}/token/refresh/`,
+      `${API}/token/refresh/`,
+      `${API}/auth/token/refresh/`,
+      `${API}/accounts/token/refresh/`,
     ];
     for (const url of REFRESH_URLS) {
       try {

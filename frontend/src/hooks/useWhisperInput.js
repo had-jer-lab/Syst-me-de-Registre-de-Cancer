@@ -53,7 +53,8 @@ export function useWhisperInput({ lang = 'ar', onResult, onError } = {}) {
           formData.append('audio', blob, `voice.${ext}`);
           formData.append('lang', lang);
 
-          const res = await fetch('http://localhost:8000/api/patients/whisper-parse/', {
+          const { API_BASE_URL } = await import('../utils/apiConfig');
+          const res = await fetch(`${API_BASE_URL}/patients/whisper-parse/`, {
             method: 'POST',
             headers: { 'Authorization': `Bearer ${token}` },
             body: formData,

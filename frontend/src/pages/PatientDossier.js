@@ -4,8 +4,9 @@ import { OngletDemandes } from './DemandeExamen';
 import PatientQRSection from '../components/PatientQRSection';
 import { MicButton } from '../components/MicButton';
 import CustomFieldsRenderer from '../components/CustomFieldsRenderer';
+import { API_BASE_URL } from '../utils/apiConfig';
 
-const API = `http://${window.location.hostname}:8000/api`;
+const API = API_BASE_URL;
 
 async function apiFetch(path, options = {}) {
   const token = localStorage.getItem('access_token');

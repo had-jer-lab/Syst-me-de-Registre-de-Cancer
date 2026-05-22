@@ -4,6 +4,9 @@ import { usePatient } from '../context/PatientContext';
 import Layout from '../components/Layout';
 import { SC, PageHeader, BtnRow, InfoItem } from '../components/FormFields';
 import DuplicateDetectionModal from '../components/DuplicateDetectionModal';
+import { API_BASE_URL } from '../utils/apiConfig';
+
+const API = API_BASE_URL;
 
 function fmtDate(str) {
   if (!str) return '—';
@@ -174,7 +177,7 @@ function computeSimilarity(a, b) {
 async function findPossibleDuplicate(candidate, token) {
   try {
     const q = encodeURIComponent(candidate.nom || '');
-    const res = await fetch(`http://localhost:8000/api/patients/?search=${q}`, {
+    const res = await fetch(`${API_BASE_URL}/patients/?search=${q}`, {
       headers: { Authorization: `Bearer ${token}` },
     });
     if (!res.ok) return null;
@@ -190,7 +193,7 @@ async function findPossibleDuplicate(candidate, token) {
     if (bestScore <= 50 || !bestRaw) return null;
 
     try {
-      const detailRes = await fetch(`http://localhost:8000/api/patients/${bestRaw.id}/`, {
+      const detailRes = await fetch(`${API_BASE_URL}/patients/${bestRaw.id}/`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (detailRes.ok) {
@@ -253,7 +256,7 @@ export default function Page5() {
   const [createdDossier, setCreatedDossier] = useState('');
   const [duplicateModal, setDuplicateModal] = useState(null);
 
-  const API = 'http://localhost:8000/api';
+  const API = API_BASE_URL;
 
   const s1 = score([data.first_name, data.last_name, data.date_naissance, data.phone, data.sexe, data.wilaya, data.couverture_sociale], 7);
   const s2 = score([data.type_tumeur, data.organe, data.type_histologique, data.stade_clinique, data.taille_tumorale, data.date_diagnostic], 6);
