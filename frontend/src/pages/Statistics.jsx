@@ -467,12 +467,9 @@ function deducePatientStatus(d) {
 
 // ── EXTRACTION DES ANNÉES DISPONIBLES ──────────────────────────────────────
 function getAvailableYears(dataSource = null) {
-  // Use provided data source, FALLBACK_DATA, or empty array
   const data = Array.isArray(dataSource) && dataSource.length > 0
     ? dataSource
-    : (typeof FALLBACK_DATA !== 'undefined' && Array.isArray(FALLBACK_DATA) && FALLBACK_DATA.length > 0)
-      ? FALLBACK_DATA
-      : [];
+    : [];
   
   if (!data.length) return [];
   
@@ -3605,7 +3602,7 @@ export default function StatBuilder() {
   const WILAYAS_WITH_DATA = useMemo(() => {
     const source = Array.isArray(apiData?.raw_data) && apiData.raw_data.length > 0
       ? apiData.raw_data
-      : FALLBACK_DATA;
+      : [];
     
     const wilayaSet = new Set(
       source
@@ -3651,7 +3648,7 @@ export default function StatBuilder() {
   const resolvedRawData = useMemo(() => 
     Array.isArray(apiData?.raw_data) && apiData.raw_data.length > 0
       ? apiData.raw_data.filter(d => d?.wilaya)
-      : FALLBACK_DATA.filter(d => d?.wilaya),
+      : [],
     [apiData]
   );
 
@@ -4403,7 +4400,7 @@ export default function StatBuilder() {
     setTimeout(() => {
       const SOURCE = Array.isArray(apiData?.raw_data) && apiData.raw_data.length > 0
         ? apiData.raw_data
-        : FALLBACK_DATA;
+        : [];
       let data = SOURCE.filter(d =>
         (!filters.sex||d.sex===filters.sex)&&(!filters.age||d.age===filters.age)&&
         (!filters.yearStart||d.year>=Number(filters.yearStart))&&(!filters.yearEnd||d.year<=Number(filters.yearEnd))&&
