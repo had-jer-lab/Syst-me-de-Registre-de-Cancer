@@ -30,6 +30,8 @@ class UserSerializer(serializers.ModelSerializer):
 
     def get_permissions(self, obj):
         return obj.permissions_list
+    def get_full_name(self, obj):
+        return f"{obj.prenom} {obj.nom}"
 
     def create(self, validated_data):
         request = self.context.get('request')

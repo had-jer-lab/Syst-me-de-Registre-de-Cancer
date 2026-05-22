@@ -87,35 +87,13 @@ SIMPLE_JWT = {
     'REFRESH_TOKEN_LIFETIME': timedelta(days=7),
 }
 
-CORS_ALLOWED_ORIGINS = [
-    "http://localhost:3000",
-    "http://127.0.0.1:3000",
-]
+
+ALLOWED_HOSTS = ['*']
 
 # Allow credentials and all headers for development
 CORS_ALLOW_CREDENTIALS = True
-CORS_ALLOW_ALL_ORIGINS = True  # For development only
-CORS_ALLOWED_HEADERS = [
-    'accept',
-    'accept-encoding',
-    'authorization',
-    'content-type',
-    'dnt',
-    'origin',
-    'user-agent',
-    'x-csrftoken',
-    'x-requested-with',
-    "http://192.168.1.9:3000",
-]
+CORS_ALLOW_ALL_ORIGINS = True 
 
-# If a DEV_LOCAL_IP is configured, allow it as well (useful for mobile testing on LAN)
-if DEV_LOCAL_IP:
-    try:
-        # basic validation: avoid adding localhost duplicates
-        if DEV_LOCAL_IP not in ('localhost', '127.0.0.1'):
-            CORS_ALLOWED_ORIGINS.append(f"http://{DEV_LOCAL_IP}:3000")
-    except Exception:
-        pass
 
 LANGUAGE_CODE = 'fr-fr'
 TIME_ZONE = 'Africa/Algiers'

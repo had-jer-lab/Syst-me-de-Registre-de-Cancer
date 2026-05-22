@@ -1,0 +1,30 @@
+[33mcommit f9003dffa64c2365cbd69c415ef508d971b76d2f[m
+Author: had-jer-lab <hadjertouala@gmail.com>
+Date:   Fri May 22 13:23:11 2026 +0200
+
+    frontend changes
+
+backend/accounts/__pycache__/admin.cpython-313.pyc
+backend/config/__pycache__/__init__.cpython-313.pyc
+backend/config/__pycache__/settings.cpython-313.pyc
+backend/config/__pycache__/urls.cpython-313.pyc
+backend/db.sqlite3
+backend/patients/__pycache__/admin.cpython-313.pyc
+backend/patients/__pycache__/models.cpython-313.pyc
+backend/patients/__pycache__/serializers.cpython-313.pyc
+backend/patients/__pycache__/urls.cpython-313.pyc
+backend/patients/__pycache__/views.cpython-313.pyc
+backend/patients/migrations/__pycache__/0003_add_commune_coords.cpython-313.pyc
+backend/rcp/__pycache__/__init__.cpython-313.pyc
+backend/rcp/__pycache__/admin.cpython-313.pyc
+backend/rcp/__pycache__/apps.cpython-313.pyc
+backend/rcp/__pycache__/models.cpython-313.pyc
+backend/rcp/__pycache__/urls.cpython-313.pyc
+backend/rcp/__pycache__/views.cpython-313.pyc
+backend/rcp/migrations/__pycache__/0001_initial.cpython-313.pyc
+backend/rcp/migrations/__pycache__/0002_rcpdecision_signature_code_and_more.cpython-313.pyc
+backend/rcp/migrations/__pycache__/0003_rcpmeeting_vote_open_rcpmeeting_vote_proposal.cpython-313.pyc
+backend/rcp/migrations/__pycache__/0004_rcpdiscussion_audio_file_rcpdiscussion_duration_and_more.cpython-313.pyc
+backend/rcp/migrations/__pycache__/__init__.cpython-313.pyc
+backend/statistic/__pycache__/urls.cpython-313.pyc
+backend/statistic/__pycache__/views.cpython-313.pyc
