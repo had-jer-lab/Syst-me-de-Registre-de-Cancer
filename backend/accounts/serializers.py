@@ -1,22 +1,24 @@
-from rest_framework import serializers
+﻿from rest_framework import serializers
 from django.contrib.auth import authenticate
 from .models import User, LoginLog
 
 
 class UserSerializer(serializers.ModelSerializer):
     permissions = serializers.SerializerMethodField()
-    password    = serializers.CharField(write_only=True, required=False)
+    full_name = serializers.SerializerMethodField()
+    password = serializers.CharField(write_only=True, required=False)
 
     class Meta:
-        model  = User
+        model = User
         fields = [
-            'id', 'email', 'nom', 'prenom', 'telephone',
+            'id', 'email', 'nom', 'prenom', 'full_name', 'telephone',
             'role', 'specialite', 'etablissement', 'wilaya',
             'statut', 'permissions', 'created_at',
             'perm_read', 'perm_write', 'perm_rcp',
             'perm_lab', 'perm_stats', 'perm_import',
-            'password',
+            'is_active', 'is_staff', 'password',
         ]
+        read_only_fields = ['id', 'created_at', 'full_name']
         extra_kwargs = {
             'perm_read':   {'write_only': False},
             'perm_write':  {'write_only': False},
@@ -32,9 +34,7 @@ class UserSerializer(serializers.ModelSerializer):
     def create(self, validated_data):
         request = self.context.get('request')
         password = validated_data.pop('password', None)
-        created_by = None
-        if request and request.user.is_authenticated:
-            created_by = request.user
+        created_by = request.user if request and request.user.is_authenticated else None
         user = User(**validated_data)
         if created_by:
             user.created_by = created_by
@@ -54,27 +54,42 @@ class UserSerializer(serializers.ModelSerializer):
 
 
 class LoginSerializer(serializers.Serializer):
-    email    = serializers.EmailField()
+    email = serializers.EmailField()
     password = serializers.CharField(write_only=True)
 
     def validate(self, data):
-        user = authenticate(username=data['email'], password=data['password'])
-        if not user:
-            raise serializers.ValidationError("Email ou mot de passe incorrect")
+        email = data.get('email')
+        password = data.get('password')
+
+        try:
+            user = User.objects.get(email=email)
+        except User.DoesNotExist:
+            raise serializers.ValidationError("Email ou mot de passe invalide")
+
+        if not user.check_password(password):
+            raise serializers.ValidationError("Email ou mot de passe invalide")
+
         if not user.is_active:
-            raise serializers.ValidationError("Compte désactivé")
-        if user.statut != 'actif':
-            raise serializers.ValidationError("Compte suspendu ou inactif")
+            raise serializers.ValidationError("Ce compte est désactivé")
+
+        if hasattr(user, 'statut') and user.statut not in ('', None, 'actif'):
+            raise serializers.ValidationError("Ce compte est désactivé")
+
         data['user'] = user
         return data
 
 
 class LoginLogSerializer(serializers.ModelSerializer):
+    """Sérialiseur pour les logs de connexion"""
     user_name = serializers.SerializerMethodField()
-
-    class Meta:
-        model  = LoginLog
-        fields = ['id', 'user_name', 'action', 'detail', 'ip_address', 'timestamp']
+    user_email = serializers.CharField(source='user.email', read_only=True)
 
     def get_user_name(self, obj):
-        return str(obj.user) if obj.user else 'Utilisateur supprimé'
+        u = obj.user
+        return f"{u.prenom or ''} {u.nom or ''}".strip() or u.email
+
+    class Meta:
+        model = LoginLog
+        fields = ['id', 'user', 'user_name', 'user_email', 'action', 'ip_address', 'detail', 'timestamp']
+        read_only_fields = ['id', 'timestamp']
+

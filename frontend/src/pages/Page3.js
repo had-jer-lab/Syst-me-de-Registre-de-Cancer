@@ -3,6 +3,8 @@ import { useNavigate } from 'react-router-dom';
 import { usePatient } from '../context/PatientContext';
 import Layout from '../components/Layout';
 import { SC, Field, Select, TagGroup, ImgCard, PageHeader, BtnRow } from '../components/FormFields';
+import { MicButton } from '../components/MicButton';
+import CustomFieldsRenderer from '../components/CustomFieldsRenderer';
 
 const IMAGERIE_LIST = [
   { type: 'IRM', icon: '🏥' },
@@ -17,11 +19,11 @@ const IMAGERIE_LIST = [
 ];
 
 const MARQUEURS = [
-  { key: 'cea', label: 'CEA', unit: 'ng/mL' },
+  { key: 'cea',   label: 'CEA',    unit: 'ng/mL' },
   { key: 'ca199', label: 'CA 19-9', unit: 'U/mL' },
-  { key: 'ca125', label: 'CA 125', unit: 'U/mL' },
-  { key: 'afp', label: 'AFP', unit: 'ng/mL' },
-  { key: 'psa', label: 'PSA', unit: 'ng/mL' },
+  { key: 'ca125', label: 'CA 125',  unit: 'U/mL' },
+  { key: 'afp',   label: 'AFP',     unit: 'ng/mL' },
+  { key: 'psa',   label: 'PSA',     unit: 'ng/mL' },
   { key: 'ca153', label: 'CA 15-3', unit: 'U/mL' },
 ];
 
@@ -43,7 +45,7 @@ export default function Page3() {
     update({ imagerie: next });
   };
 
-  const addRechute = () => update({ rechutes: [...(data.rechutes || []), { debut: '', fin: '' }] });
+  const addRechute    = () => update({ rechutes: [...(data.rechutes || []), { debut: '', fin: '' }] });
   const removeRechute = (i) => update({ rechutes: data.rechutes.filter((_, idx) => idx !== i) });
   const updateRechute = (i, field, val) => {
     const r = [...(data.rechutes || [])];
@@ -51,7 +53,7 @@ export default function Page3() {
     update({ rechutes: r });
   };
 
-  const addPatho = () => update({ pathos: [...(data.pathos || []), { name: '', date: '' }] });
+  const addPatho    = () => update({ pathos: [...(data.pathos || []), { name: '', date: '' }] });
   const removePatho = (i) => update({ pathos: data.pathos.filter((_, idx) => idx !== i) });
   const updatePatho = (i, field, val) => {
     const p = [...(data.pathos || [])];
@@ -60,7 +62,7 @@ export default function Page3() {
   };
 
   return (
-    <Layout currentStep={3} progress={60}>
+    <Layout currentStep={4} progress={60}>
       <PageHeader
         icon="🔬"
         iconBg="linear-gradient(135deg,#FFA26B,#ffbf97)"
@@ -72,20 +74,17 @@ export default function Page3() {
         {/* LEFT */}
         <div className="col-stack">
 
-          {/* Marqueurs tumoraux */}
+          {/* Marqueurs tumoraux — valeurs numériques, pas de micro utile */}
           <SC label="Marqueurs tumoraux">
             {MARQUEURS.map(({ key, label, unit }) => (
-              <div key={key} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', background: 'var(--card)', border: '1.5px solid var(--border)', borderRadius: 10, marginBottom: 8 }}>
-                <span style={{ flex: 1, fontSize: 13, fontWeight: 700, color: 'var(--text)' }}>{label}</span>
-                <span style={{ fontSize: 11, color: 'var(--text-muted)', marginRight: 6 }}>{unit}</span>
+              <div key={key} style={{ display:'flex', alignItems:'center', gap:10, padding:'8px 12px', background:'var(--card)', border:'1.5px solid var(--border)', borderRadius:10, marginBottom:8 }}>
+                <span style={{ flex:1, fontSize:13, fontWeight:700, color:'var(--text)' }}>{label}</span>
+                <span style={{ fontSize:11, color:'var(--text-muted)', marginRight:6 }}>{unit}</span>
                 <input
                   className="fi"
-                  style={{ width: 90 }}
-                  type="number"
-                  step="0.1"
-                  placeholder="—"
-                  value={data[key]}
-                  onChange={set(key)}
+                  style={{ width:90 }}
+                  type="number" step="0.1" placeholder="—"
+                  value={data[key]} onChange={set(key)}
                 />
               </div>
             ))}
@@ -102,7 +101,7 @@ export default function Page3() {
                 <input className="fi" type="number" step="0.1" placeholder="—" value={data.creat} onChange={set('creat')} />
               </Field>
             </div>
-            <div className="field-row c2" style={{ marginTop: 10 }}>
+            <div className="field-row c2" style={{ marginTop:10 }}>
               <Field label="GGT (U/L)">
                 <input className="fi" type="number" step="1" placeholder="—" value={data.ggt} onChange={set('ggt')} />
               </Field>
@@ -110,7 +109,7 @@ export default function Page3() {
                 <input className="fi" type="number" step="1" placeholder="—" value={data.ldh} onChange={set('ldh')} />
               </Field>
             </div>
-            <div className="field-row c2" style={{ marginTop: 10 }}>
+            <div className="field-row c2" style={{ marginTop:10 }}>
               <Field label="Hb (g/dL)">
                 <input className="fi" type="number" step="0.1" placeholder="—" value={data.hb} onChange={set('hb')} />
               </Field>
@@ -126,13 +125,13 @@ export default function Page3() {
               <Select options={['Réalisée — résultat positif','Réalisée — résultat négatif','En attente de résultat','Non réalisée']}
                 placeholder="Sélectionner…" value={data.biopsy} onChange={set('biopsy')} />
             </Field>
-            <Field label="Date de la biopsie" style={{ marginTop: 10 }}>
+            <Field label="Date de la biopsie" style={{ marginTop:10 }}>
               <input className="fi" type="date" value={data.biopsyDate} onChange={set('biopsyDate')} />
             </Field>
-            <Field label="Joindre rapport AP" style={{ marginTop: 10 }}>
+            <Field label="Joindre rapport AP" style={{ marginTop:10 }}>
               <div className="upload-box" onClick={() => bioRef.current.click()}>
                 📎 Cliquer pour joindre le rapport
-                <input ref={bioRef} type="file" accept=".pdf,.jpg,.png" style={{ display: 'none' }}
+                <input ref={bioRef} type="file" accept=".pdf,.jpg,.png" style={{ display:'none' }}
                   onChange={e => e.target.files[0] && setBioFileName('📄 ' + e.target.files[0].name)} />
               </div>
               {bioFileName && <div className="file-name">{bioFileName}</div>}
@@ -152,10 +151,10 @@ export default function Page3() {
                   onToggle={() => toggleImagerie(type)} />
               ))}
             </div>
-            <Field label="Joindre fichier imagerie" style={{ marginTop: 14 }}>
+            <Field label="Joindre fichier imagerie" style={{ marginTop:14 }}>
               <div className="upload-box" onClick={() => imgRef.current.click()}>
                 📎 Joindre fichier (IRM, Scanner…)
-                <input ref={imgRef} type="file" accept=".dcm,.pdf,.jpg,.png" style={{ display: 'none' }}
+                <input ref={imgRef} type="file" accept=".dcm,.pdf,.jpg,.png" style={{ display:'none' }}
                   onChange={e => e.target.files[0] && setImgFileName('📄 ' + e.target.files[0].name)} />
               </div>
               {imgFileName && <div className="file-name">{imgFileName}</div>}
@@ -165,13 +164,13 @@ export default function Page3() {
           {/* Rechutes */}
           <SC label="Rechutes">
             {(data.rechutes || []).map((r, i) => (
-              <div key={i} className="list-item" style={{ marginBottom: 8 }}>
+              <div key={i} className="list-item" style={{ marginBottom:8 }}>
                 <div className="num-badge">{i + 1}</div>
-                <div className="fg" style={{ flex: 1 }}>
+                <div className="fg" style={{ flex:1 }}>
                   <input className="fi" type="date" value={r.debut} onChange={e => updateRechute(i, 'debut', e.target.value)} />
                 </div>
-                <span style={{ color: 'var(--text-muted)', fontSize: 12, padding: '0 4px' }}>→</span>
-                <div className="fg" style={{ flex: 1 }}>
+                <span style={{ color:'var(--text-muted)', fontSize:12, padding:'0 4px' }}>→</span>
+                <div className="fg" style={{ flex:1 }}>
                   <input className="fi" type="date" value={r.fin} onChange={e => updateRechute(i, 'fin', e.target.value)} />
                 </div>
                 {i > 0 && (
@@ -182,14 +181,29 @@ export default function Page3() {
             <button className="list-add" onClick={addRechute}>＋ Ajouter une rechute</button>
           </SC>
 
-          {/* Pathologies chroniques */}
+          <CustomFieldsRenderer
+            section="biologie"
+            values={data.customFields || {}}
+            onChange={(id, name, val) => update({
+              customFields: {
+                ...(data.customFields || {}),
+                [id]: val,
+                [name]: val,
+              },
+            })}
+          />
+
+          {/* Pathologies chroniques — avec MicButton sur le champ nom */}
           <SC label="Pathologies chroniques associées">
             {(data.pathos || []).map((p, i) => (
               <div key={i} className="list-item">
-                <input className="fi" style={{ flex: 1, border: 'none', background: 'transparent' }}
-                  type="text" placeholder="Pathologie…"
-                  value={p.name} onChange={e => updatePatho(i, 'name', e.target.value)} />
-                <input className="fi" style={{ width: 130 }} type="text" placeholder="Date…"
+                <div style={{ flex:1, display:'flex', gap:6, alignItems:'center' }}>
+                  <input className="fi" style={{ flex:1, border:'none', background:'transparent' }}
+                    type="text" placeholder="Pathologie…"
+                    value={p.name} onChange={e => updatePatho(i, 'name', e.target.value)} />
+                  <MicButton onResult={(t) => updatePatho(i, 'name', t)} />
+                </div>
+                <input className="fi" style={{ width:130 }} type="text" placeholder="Date…"
                   value={p.date} onChange={e => updatePatho(i, 'date', e.target.value)} />
                 <button className="del-btn" onClick={() => removePatho(i)}>✕</button>
               </div>
@@ -208,7 +222,7 @@ export default function Page3() {
         </div>
       </div>
 
-      <BtnRow onBack={() => navigate('/page2')} onNext={() => navigate('/page4')} />
+      <BtnRow onBack={() => navigate('/page6')} onNext={() => navigate('/page4')} />
     </Layout>
   );
 }

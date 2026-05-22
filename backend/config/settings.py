@@ -5,9 +5,14 @@ from datetime import timedelta
 
 BASE_DIR = Path(__file__).resolve().parent.parent  # ✅ أولاً
 
-SECRET_KEY = config('SECRET_KEY')
+# Adresse IP locale utilisée pour permettre l'accès depuis un téléphone sur le LAN
+# Configurez `DEV_LOCAL_IP` dans votre .env si besoin (ex: 192.168.1.8)
+DEV_LOCAL_IP = config('DEV_LOCAL_IP', default='')
+
+SECRET_KEY = config('SECRET_KEY', default='django-insecure-temporary-key-for-dev')
 DEBUG = config('DEBUG', cast=bool, default=True)
-ALLOWED_HOSTS = ['localhost', '127.0.0.1']
+ALLOWED_HOSTS = ['*']
+
 
 INSTALLED_APPS = [
     'django.contrib.admin',
@@ -26,6 +31,7 @@ INSTALLED_APPS = [
     'statistic',
     'django_filters',
     'rcp',
+    'django_apscheduler',
 ]
 
 MIDDLEWARE = [
@@ -99,7 +105,17 @@ CORS_ALLOWED_HEADERS = [
     'user-agent',
     'x-csrftoken',
     'x-requested-with',
+    "http://192.168.1.9:3000",
 ]
+
+# If a DEV_LOCAL_IP is configured, allow it as well (useful for mobile testing on LAN)
+if DEV_LOCAL_IP:
+    try:
+        # basic validation: avoid adding localhost duplicates
+        if DEV_LOCAL_IP not in ('localhost', '127.0.0.1'):
+            CORS_ALLOWED_ORIGINS.append(f"http://{DEV_LOCAL_IP}:3000")
+    except Exception:
+        pass
 
 LANGUAGE_CODE = 'fr-fr'
 TIME_ZONE = 'Africa/Algiers'

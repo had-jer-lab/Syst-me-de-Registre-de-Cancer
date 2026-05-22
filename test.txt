@@ -1,0 +1,178 @@
+import org.junit.*;
+import static org.junit.Assert.*;
+
+public class LendemainTest {
+
+    private Date date ;  
+
+    private int[] dateNormale;       
+    private int[] finMois31;          
+    private int[] finMois30;         
+    private int[] finFevrierBissext;  
+    private int[] finFevrierNormal;   
+    private int[] finAnnee;           
+    private int[] premiereDateValide; 
+    private int[] derniereDateValide; 
+
+    @Before
+    public void setUp() {
+        date               = new Date(1, 1, 2000); // objet neutre pour appeler lendemain()
+        dateNormale        = new int[]{15, 6,  2000};
+        finMois31          = new int[]{31, 1,  2000};
+        finMois30          = new int[]{30, 4,  2000};
+        finFevrierBissext  = new int[]{29, 2,  2000};
+        finFevrierNormal   = new int[]{28, 2,  2001};
+        finAnnee           = new int[]{31, 12, 2000};
+        premiereDateValide = new int[]{ 1, 1,  1583};
+        derniereDateValide = new int[]{30, 12, 2999};
+
+        System.out.println("=== Debut du test ===");
+    }
+
+    @After
+    public void tearDown() {
+        System.out.println("=== Fin du test ===\n");
+    }
+
+   
+    @Test(expected = IllegalArgumentException.class)
+    public void testAnneeInferieure_invalide() {
+        date.lendemain(1, 1, 1582);
+    }
+
+    @Test(expected = IllegalArgumentException.class)
+    public void testAnneeSuperieure_invalide() {
+        date.lendemain(1, 1, 3000);
+    }
+
+    @Test(expected = IllegalArgumentException.class)
+    public void testMoisInferieur_invalide() {
+        date.lendemain(1, 0, 2000);
+    }
+
+    @Test(expected = IllegalArgumentException.class)
+    public void testMoisSuperieur_invalide() {
+        date.lendemain(1, 13, 2000);
+    }
+
+    @Test(expected = IllegalArgumentException.class)
+    public void testJourInferieur_invalide() {
+        date.lendemain(0, 6, 2000);
+    }
+
+    @Test(expected = IllegalArgumentException.class)
+    public void testJourSuperieur_invalide() {
+        date.lendemain(32, 1, 2000);
+    }
+
+    @Test(expected = IllegalArgumentException.class)
+    public void testJour31_mois_30jours_invalide() {
+        date.lendemain(31, 4, 2000);
+    }
+
+    @Test(expected = IllegalArgumentException.class)
+    public void testJour29_fevrier_non_bissextile_invalide() {
+        date.lendemain(29, 2, 2001);
+    }
+
+    // =========================================================================
+    // 2. CLASSES VALIDES — Cas normaux raffinés
+    // =========================================================================
+
+    @Test
+    public void testJourNormal_milieu_de_mois() {
+        Date result = date.lendemain(
+            dateNormale[0], dateNormale[1], dateNormale[2]);
+        assertEquals(new Date(16, 6, 2000), result);
+    }
+
+    @Test
+    public void testFinDeMois_31_jours() {
+        Date result = date.lendemain(
+            finMois31[0], finMois31[1], finMois31[2]);
+        assertEquals(new Date(1, 2, 2000), result);
+    }
+
+    @Test
+    public void testFinDeMois_30_jours() {
+        Date result = date.lendemain(
+            finMois30[0], finMois30[1], finMois30[2]);
+        assertEquals(new Date(1, 5, 2000), result);
+    }
+
+    @Test
+    public void testFinFevrier_non_bissextile() {
+        Date result = date.lendemain(
+            finFevrierNormal[0], finFevrierNormal[1], finFevrierNormal[2]);
+        assertEquals(new Date(1, 3, 2001), result);
+    }
+
+    @Test
+    public void testFinFevrier_29_bissextile() {
+        Date result = date.lendemain(
+            finFevrierBissext[0], finFevrierBissext[1], finFevrierBissext[2]);
+        assertEquals(new Date(1, 3, 2000), result);
+    }
+
+    @Test
+    public void testAvantFinFevrier_bissextile() {
+        // 28/02/2000 → 29/02/2000 car 2000 est bissextile
+        Date result = date.lendemain(28, 2, 2000);
+        assertEquals(new Date(29, 2, 2000), result);
+    }
+
+    @Test
+    public void testFinAnnee() {
+        Date result = date.lendemain(
+            finAnnee[0], finAnnee[1], finAnnee[2]);
+        assertEquals(new Date(1, 1, 2001), result);
+    }
+
+    // =========================================================================
+    // 3. TESTS AUX LIMITES — Frontières des domaines
+    // =========================================================================
+
+    @Test
+    public void testLimite_premiere_date_valide() {
+        Date result = date.lendemain(
+            premiereDateValide[0], premiereDateValide[1], premiereDateValide[2]);
+        assertEquals(new Date(2, 1, 1583), result);
+    }
+
+    @Test
+    public void testLimite_derniere_date_valide() {
+        Date result = date.lendemain(
+            derniereDateValide[0], derniereDateValide[1], derniereDateValide[2]);
+        assertEquals(new Date(31, 12, 2999), result);
+    }
+
+    @Test(expected = IllegalArgumentException.class)
+    public void testLimite_annee_1582_invalide() {
+        date.lendemain(1, 1, 1582);
+    }
+
+    @Test(expected = IllegalArgumentException.class)
+    public void testLimite_annee_3000_invalide() {
+        date.lendemain(1, 1, 3000);
+    }
+
+    @Test
+    public void testLimite_centenaire_non_bissextile() {
+        Date result = date.lendemain(28, 2, 1900);
+        assertEquals(new Date(1, 3, 1900), result);
+    }
+
+    @Test
+    public void testLimite_annee_400_bissextile() {
+        Date result = date.lendemain(29, 2, 2000);
+        assertEquals(new Date(1, 3, 2000), result);
+    }
+
+    @Test
+    public void testEstBissextile() {
+        assertTrue(Date.estBissextile(2000));
+        assertTrue(Date.estBissextile(2004));
+        assertFalse(Date.estBissextile(1900));
+        assertFalse(Date.estBissextile(2001));
+    }
+}

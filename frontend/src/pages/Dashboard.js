@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom'; // ✅ useLocation ajouté
+import { usePatient } from '../context/PatientContext';
+import NotificationBell from '../components/NotificationBell';
 
 // ─── API helper ───────────────────────────────────────────────────────────────
 const API = 'http://localhost:8000/api';
@@ -119,6 +121,8 @@ export default function Dashboard() {
     }
   };
 
+  const { reset } = usePatient();
+
   const handleNavClick = (id) => {
     if (id === 'stats') {
       navigate('/statistics');
@@ -135,6 +139,7 @@ export default function Dashboard() {
       await apiFetch('/auth/logout/', { method: 'POST' });
     } catch { /* ignore */ }
     localStorage.clear();
+    reset();
     navigate('/auth');
   };
 
@@ -201,7 +206,7 @@ export default function Dashboard() {
               </div>
               <button type="submit" style={s.searchBtn}>Chercher</button>
             </form>
-            <button style={s.notifBtn}>🔔</button>
+            <NotificationBell />
             <div style={s.avatar}>
               {(user.prenom?.[0] || 'D')}{(user.nom?.[0] || 'R')}
             </div>
@@ -295,7 +300,7 @@ export default function Dashboard() {
             <table style={s.table}>
               <thead>
                 <tr style={s.thead}>
-                  {['N° Dossier', 'Patient', 'Âge', 'Sexe', 'Organe', 'Stade', 'Wilaya', 'Diagnostic', 'Actions'].map(h => (
+                  {['N° Dossier', 'Patient', 'Âge', 'Sexe', 'Organe', 'Stade', 'Wilaya', 'Actions'].map(h => (
                     <th key={h} style={s.th}>{h}</th>
                   ))}
                 </tr>
@@ -307,7 +312,13 @@ export default function Dashboard() {
                   const sc     = STADE_COLORS[stade] || {};
                   return (
                     <tr key={p.id} style={{ ...s.tr, background: i % 2 === 0 ? '#fff' : '#FAFBFF' }}>
-                      <td style={s.td}><span style={s.dossierId}>{p.numero_dossier}</span></td>
+                      <td style={s.td}>
+                        <span 
+                          style={{ ...s.dossierId, cursor: 'pointer', textDecoration: 'underline' }}
+                          onClick={() => navigate(`/patient/${p.id}`)}>
+                          {p.numero_dossier}
+                        </span>
+                      </td>
                       <td style={s.td}>
                         <div style={s.patientCell}>
                           <div style={s.patientAvatar}>
@@ -343,11 +354,6 @@ export default function Dashboard() {
                         <span style={{ fontSize: 13, color: '#4A5568' }}>{p.wilaya_name || '—'}</span>
                       </td>
                       <td style={s.td}>
-                        <span style={{ fontSize: 12, color: '#7A8BAD', fontWeight: 600 }}>
-                          {cancer?.date_diagnostic !== '—' ? cancer?.date_diagnostic : '—'}
-                        </span>
-                      </td>
-                      <td style={s.td}>
                         <div style={s.actionBtns}>
                           <button style={s.iconBtnView}
                             title="Voir le dossier"
@@ -372,7 +378,7 @@ export default function Dashboard() {
                 })}
                 {patients.length === 0 && !loading && (
                   <tr>
-                    <td colSpan={9} style={{ ...s.td, textAlign: 'center', padding: 60 }}>
+                    <td colSpan={8} style={{ ...s.td, textAlign: 'center', padding: 60 }}>
                       <div style={{ fontSize: 40, marginBottom: 12 }}>👥</div>
                       <div style={{ fontWeight: 700, color: '#1A2B4A', marginBottom: 6 }}>
                         {search ? `Aucun résultat pour « ${search} »` : 'Aucun patient enregistré'}
@@ -444,7 +450,6 @@ const s = {
   searchIcon: { position: 'absolute', left: 13, top: '50%', transform: 'translateY(-50%)', fontSize: 14, color: '#7A8BAD' },
   searchInput: { background: '#fff', border: '1.5px solid #DDE4F3', borderRadius: 30, padding: '10px 16px 10px 38px', fontSize: 13, fontFamily: "'Nunito', sans-serif", color: '#1A2B4A', outline: 'none', width: 260 },
   searchBtn: { padding: '10px 18px', borderRadius: 30, border: 'none', background: '#4A6CF7', color: '#fff', fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: "'Nunito', sans-serif" },
-  notifBtn: { width: 38, height: 38, border: 'none', background: '#fff', borderRadius: '50%', cursor: 'pointer', fontSize: 16, boxShadow: '0 4px 14px rgba(74,108,247,0.1)' },
   avatar: { width: 38, height: 38, borderRadius: '50%', background: 'linear-gradient(135deg,#4A6CF7,#6B87FF)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: 800, fontSize: 13, boxShadow: '0 4px 14px rgba(74,108,247,0.3)' },
   statsGrid: { display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 16, marginBottom: 28 },
   statCard: { background: '#fff', borderRadius: 16, padding: '20px', boxShadow: '0 4px 20px rgba(74,108,247,0.08)', display: 'flex', alignItems: 'center', gap: 16, border: '1.5px solid #EEF2FF' },

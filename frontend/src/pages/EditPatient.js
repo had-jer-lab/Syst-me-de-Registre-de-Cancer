@@ -160,7 +160,13 @@ export default function EditPatient() {
   // ── Données patient ──
   const [form, setForm] = useState({
     first_name: '', last_name: '', date_naissance: '', sexe: 'M',
-    phone: '', national_id: '',
+    phone: '', email: '', national_id: '',
+    situation_familiale: '', profession: '', adresse: '',
+    wilaya: '', commune: '',
+    poids: '', taille: '', imc: '',
+    allergies: '', autres_allergies: '',
+    antecedents_familiaux: [], antecedents_fam_yn: '',
+    observations: '',
   });
 
   // ── Données cancer (premier cancer) ──
@@ -180,12 +186,26 @@ export default function EditPatient() {
       .then(data => {
         if (!data) return;
         setForm({
-          first_name:     data.first_name     || '',
-          last_name:      data.last_name      || '',
-          date_naissance: data.date_naissance || '',
-          sexe:           data.sexe           || 'M',
-          phone:          data.phone          || '',
-          national_id:    data.national_id    || '',
+          first_name:           data.first_name     || '',
+          last_name:            data.last_name      || '',
+          date_naissance:       data.date_naissance || '',
+          sexe:                 data.sexe           || 'M',
+          phone:                data.phone          || '',
+          email:                data.email          || '',
+          national_id:          data.national_id    || '',
+          situation_familiale:  data.situation_familiale || '',
+          profession:           data.profession     || '',
+          adresse:              data.adresse        || '',
+          wilaya:              data.wilaya_name    || '',
+          commune:             data.commune_name   || '',
+          poids:                data.poids?.toString() || '',
+          taille:               data.taille?.toString() || '',
+          imc:                  data.imc?.toString() || '',
+          allergies:            data.allergies      || '',
+          autres_allergies:     data.autres_allergies || '',
+          antecedents_familiaux: Array.isArray(data.antecedents_familiaux) ? data.antecedents_familiaux : [],
+          antecedents_fam_yn:   data.antecedents_fam_yn || '',
+          observations:         data.observations   || '',
         });
 
         // Prendre le premier cancer
@@ -196,6 +216,7 @@ export default function EditPatient() {
           const tMatch = tnm.match(/T[x0-4is]+/i);
           const nMatch = tnm.match(/N[x0-3]+/i);
           const mMatch = tnm.match(/M[x01]+/i);
+          console.log('[DEBUG EditPatient] Cancer loaded:', { date_diagnostic: c.date_diagnostic, tnm: c.tnm });
           setCancerForm({
             organe:           c.cancer_type?.name    || '',
             sous_type:        c.sous_type            || '',
@@ -204,12 +225,13 @@ export default function EditPatient() {
             tnmN:             nMatch?.[0]?.toUpperCase() || 'N0',
             tnmM:             mMatch?.[0]?.toUpperCase() || 'M0',
             grade:            c.grade                || '',
+            type_tumeur:      c.type_tumeur          || '',
             date_diagnostic:  c.date_diagnostic      || '',
             dernier_rdv:      data.dernier_rdv        || '',
             type_histologique: c.histology?.type_histologique || '',
-            localise:         true,
-            metastatique:     (c.metastases?.length || 0) > 0,
-            recidive:         false,
+            localise:         c.localise !== false,
+            metastatique:     (c.metastases?.length || 0) > 0 || c.metastatique === true,
+            recidive:         c.recidive === true,
           });
         }
       })
@@ -225,17 +247,45 @@ export default function EditPatient() {
       // PATCH patient
       await apiFetch(`/patients/${id}/`, {
         method: 'PATCH',
-        body: JSON.stringify(form),
+        body: JSON.stringify({
+          first_name: form.first_name,
+          last_name: form.last_name,
+          date_naissance: form.date_naissance,
+          sexe: form.sexe,
+          phone: form.phone,
+          email: form.email,
+          national_id: form.national_id,
+          situation_familiale: form.situation_familiale,
+          profession: form.profession,
+          adresse: form.adresse,
+          poids: form.poids ? parseFloat(form.poids) : null,
+          taille: form.taille ? parseFloat(form.taille) : null,
+          imc: form.imc ? parseFloat(form.imc) : null,
+          allergies: form.allergies,
+          autres_allergies: form.autres_allergies,
+          antecedents_familiaux: form.antecedents_familiaux,
+          antecedents_fam_yn: form.antecedents_fam_yn,
+          observations: form.observations,
+          wilaya_text: form.wilaya,
+          commune_text: form.commune,
+        }),
       });
 
       // PATCH ou POST cancer
       if (cancerForm.organe) {
         const cancerPayload = {
           patient:         parseInt(id),
+          organe:          cancerForm.organe || '',
           stade_clinique:  cancerForm.stade_clinique || '',
-          tnm:             [cancerForm.tnmT, cancerForm.tnmN, cancerForm.tnmM].join(''),
+          tnm:             [cancerForm.tnmT, cancerForm.tnmN, cancerForm.tnmM].filter(Boolean).join(''),
           grade:           cancerForm.grade || '',
-          date_diagnostic: cancerForm.date_diagnostic || null,
+          date_diagnostic: cancerForm.date_diagnostic ? cancerForm.date_diagnostic : null,
+          type_histologique: cancerForm.type_histologique || '',
+          type_tumeur: cancerForm.type_tumeur || '',
+          sous_type: cancerForm.sous_type || '',
+          localise: cancerForm.localise,
+          metastatique: cancerForm.metastatique,
+          recidive: cancerForm.recidive,
         };
 
         if (cancer?.id) {
@@ -339,7 +389,7 @@ export default function EditPatient() {
         {activeTab === 'patient' && (
           <div style={s.grid2}>
 
-            <SectionCard title="Identité" icon="🪪">
+            <SectionCard title="Données personnelles" icon="🪪">
               <div style={s.row2}>
                 <Field label="Prénom *">
                   <Input value={form.first_name} onChange={v => upForm('first_name', v)} placeholder="Prénom" />
@@ -364,8 +414,70 @@ export default function EditPatient() {
               <Field label="Téléphone">
                 <Input value={form.phone} onChange={v => upForm('phone', v)} placeholder="0770 123 456" />
               </Field>
+              <Field label="Email" style={{ marginTop: 12 }}>
+                <Input type="email" value={form.email} onChange={v => upForm('email', v)} placeholder="email@example.com" />
+              </Field>
               <Field label="NIN — Numéro d'identification nationale" style={{ marginTop: 12 }}>
                 <Input value={form.national_id} onChange={v => upForm('national_id', v)} placeholder="ex: 1D00925D42889" />
+              </Field>
+            </SectionCard>
+
+            <SectionCard title="Adresse" icon="📍">
+              <Field label="Wilaya">
+                <Input value={form.wilaya} onChange={v => upForm('wilaya', v)} placeholder="Nom de la wilaya" />
+              </Field>
+              <Field label="Commune" style={{ marginTop: 12 }}>
+                <Input value={form.commune} onChange={v => upForm('commune', v)} placeholder="Nom de la commune" />
+              </Field>
+            </SectionCard>
+
+            <SectionCard title="Situation sociale" icon="👥">
+              <Field label="Situation familiale">
+                <SelectField
+                  value={form.situation_familiale}
+                  onChange={v => upForm('situation_familiale', v)}
+                  options={['Célibataire','Marié(e)','Divorcé(e)','Veuf / Veuve']}
+                  placeholder="—"
+                />
+              </Field>
+              <Field label="Profession" style={{ marginTop: 12 }}>
+                <Input value={form.profession} onChange={v => upForm('profession', v)} placeholder="Profession" />
+              </Field>
+              <Field label="Adresse" style={{ marginTop: 12 }}>
+                <Input value={form.adresse} onChange={v => upForm('adresse', v)} placeholder="Adresse complète" />
+              </Field>
+            </SectionCard>
+
+            <SectionCard title="Données de santé" icon="🩺">
+              <div style={s.row2}>
+                <Field label="Poids (kg)" half>
+                  <Input type="number" value={form.poids} onChange={v => upForm('poids', v)} placeholder="70" />
+                </Field>
+                <Field label="Taille (cm)" half>
+                  <Input type="number" value={form.taille} onChange={v => upForm('taille', v)} placeholder="175" />
+                </Field>
+              </div>
+              <Field label="IMC" style={{ marginTop: 12 }}>
+                <Input type="number" value={form.imc} onChange={v => upForm('imc', v)} placeholder="IMC (calculé)" />
+              </Field>
+            </SectionCard>
+
+            <SectionCard title="Allergies & Antécédents" icon="⚠️">
+              <Field label="Allergies">
+                <Input value={form.allergies} onChange={v => upForm('allergies', v)} placeholder="Allergie aux pénicillines..." />
+              </Field>
+              <Field label="Autres allergies" style={{ marginTop: 12 }}>
+                <Input value={form.autres_allergies} onChange={v => upForm('autres_allergies', v)} placeholder="" />
+              </Field>
+              <Field label="Antécédents familiaux (oui/non)" style={{ marginTop: 12 }}>
+                <Tags
+                  options={['Oui','Non']}
+                  value={form.antecedents_fam_yn}
+                  onChange={v => upForm('antecedents_fam_yn', v)}
+                />
+              </Field>
+              <Field label="Observations" style={{ marginTop: 12 }}>
+                <Input value={form.observations} onChange={v => upForm('observations', v)} placeholder="Remarques supplémentaires..." />
               </Field>
             </SectionCard>
 

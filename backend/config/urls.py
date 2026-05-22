@@ -13,3 +13,6 @@ urlpatterns = [
     path('api/statistic/', include('statistic.urls')),
     path('api/rcp/',     include('rcp.urls')),
 ] + static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)  # ✅ في الأسفل
+    path('api/', include('patients.urls')),
+
+]
