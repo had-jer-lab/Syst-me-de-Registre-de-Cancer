@@ -61,17 +61,8 @@ WSGI_APPLICATION = 'config.wsgi.application'
 
 DATABASES = {
     'default': {
-<<<<<<< HEAD
         'ENGINE': 'django.db.backends.sqlite3',
         'NAME': BASE_DIR / 'db.sqlite3',
-=======
-        'ENGINE': 'django.db.backends.postgresql',
-        'NAME':     'cancer_registry',
-        'USER':    'postgres',
-        'PASSWORD': '1234',
-        'HOST':     config('DB_HOST', default='localhost'),
-        'PORT':     config('DB_PORT', default='5432'),
->>>>>>> 883c63b021793a3e6ac53b33ff4b015f95bc0bca
     }
 }
 AUTH_USER_MODEL = 'accounts.User'

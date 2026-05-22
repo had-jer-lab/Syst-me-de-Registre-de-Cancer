@@ -11,6 +11,5 @@ urlpatterns = [
     path('api/auth/',    include('accounts.urls')),
     path('api/patients/',include('patients.urls')),
     path('api/statistic/', include('statistic.urls')),
-]
     path('api/rcp/',     include('rcp.urls')),
 ] + static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)  # ✅ في الأسفل
