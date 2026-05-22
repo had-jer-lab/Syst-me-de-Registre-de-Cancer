@@ -12,12 +12,12 @@ export const PatientProvider = ({ children }) => {
     // Page 2
     typeT: '', organe: '', lat: '', topo: '', stade: '',
     tnmT: 'T0', tnmN: 'N0', tnmM: 'M0',
-    localise: true, metastatique: false, recidive: false,
+    localisation: '',   // 'localise' | 'metastatique' | 'recidive' | ''
     diagDate: '', consultDate: '', histo: '', grade: '',
-    taille: '', recepteurs: '', service: '', medecin: '',
+    taille: '', recepteurs: '', 
     trtActuel: '',
-    dernier_rdv: '',   // ✅ NOUVEAU — Date du dernier RDV
-    sous_type: '',     // ✅ NOUVEAU — Sous-type de cancer
+    dernier_rdv: '',
+    sous_type: '',
     // Page 3
     cea: '', ca199: '', ca125: '', afp: '', psa: '', ca153: '',
     nfs: '', creat: '', ggt: '', ldh: '', hb: '', tp: '',

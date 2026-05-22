@@ -50,10 +50,28 @@ function Donut({ pct }) {
   );
 }
 
+// Convertir sexe lisible → code API
+function getSexeCode(sexe) {
+  if (!sexe) return 'M';
+  if (sexe.includes('Masculin') || sexe === 'M') return 'M';
+  if (sexe.includes('Féminin') || sexe === 'F') return 'F';
+  return 'M';
+}
+
+// Libellé lisible du statut de localisation
+function getLocalisationLabel(val) {
+  const map = {
+    localise: 'Localisé',
+    metastatique: 'Métastatique',
+    recidive: 'Récidive',
+  };
+  return map[val] || '—';
+}
+
 export default function Page5() {
   const navigate = useNavigate();
   const { data, update } = usePatient();
-  const [checks, setChecks]       = useState({ c1: false, c2: false, c3: false });
+  const [checks, setChecks]       = useState({ c1: true, c2: true, c3: true });
   const [unchecked, setUnchecked] = useState([]);
   const [showSuccess, setShowSuccess] = useState(false);
   const [saving, setSaving]       = useState(false);
@@ -61,7 +79,7 @@ export default function Page5() {
   const [createdDossier, setCreatedDossier] = useState('');
 
   // Compute scores
-  const s1 = score([data.nom, data.prenom, data.dob, data.tel, data.sexe, data.wilaya, data.couverture], 7);
+  const s1 = score([data.nom, data.prenom, data.dob, data.tel, data.sexe, data.wilaya], 6);
   const s2 = score([data.typeT, data.organe, data.histo, data.stade, data.taille, data.diagDate], 6);
   const s3 = score([data.cea, data.ca199, data.nfs, data.biopsy, data.como], 5);
   const s4 = score([data.tabac, data.alcool, data.sport, data.poids, data.antFam, data.trtAnt], 6);
@@ -71,9 +89,8 @@ export default function Page5() {
 
   const toggleCheck = (key) => setChecks(prev => ({ ...prev, [key]: !prev[key] }));
 
-  // ── SAVE — envoie vraiment les données au backend ─────────────────────────
+  // ── SAVE ─────────────────────────────────────────────────────────────────
   const handleSave = async () => {
-    // 1. Vérifier les checkboxes
     const missing = Object.entries(checks).filter(([, v]) => !v).map(([k]) => k);
     if (missing.length > 0) {
       setUnchecked(missing);
@@ -92,16 +109,20 @@ export default function Page5() {
         return;
       }
 
-      // ── 2. Créer le patient ──────────────────────────────────────
+      // ── Construire payload patient ──────────────────────────────────────
       const patientPayload = {
         first_name:     data.prenom        || '',
         last_name:      data.nom           || '',
         date_naissance: data.dob           || '',
-        sexe:           data.sexe?.includes('Masculin') ? 'M' : 'F',
-        phone:          data.tel           || '',
+        sexe:           getSexeCode(data.sexe),
+        phone:          data.tel?.replace(/\s/g, '') || '',
         national_id:    data.nin           || null,
         data_source:    'manual',
       };
+
+      // Ajout commune si disponible (on cherche par nom)
+      // Note: le backend attend commune comme FK id, 
+      // on envoie juste les champs texte disponibles
 
       const patRes = await fetch('http://localhost:8000/api/patients/', {
         method: 'POST',
@@ -114,7 +135,6 @@ export default function Page5() {
 
       if (!patRes.ok) {
         const err = await patRes.json();
-        console.error('Erreur patient:', err);
         const msg = err.date_naissance?.[0] || err.national_id?.[0] || err.detail || JSON.stringify(err);
         setSaveError('Erreur : ' + msg);
         setSaving(false);
@@ -124,12 +144,13 @@ export default function Page5() {
       const patient = await patRes.json();
       setCreatedDossier(patient.numero_dossier || '');
 
-      // ── 3. Créer le cancer si organe renseigné ────────────────────
+      // ── Créer le cancer si organe renseigné ────────────────────────────
       if (data.organe) {
+        const tnmStr = [data.tnmT, data.tnmN, data.tnmM].filter(Boolean).join('');
         const cancerPayload = {
           patient:         patient.id,
           stade_clinique:  data.stade    || '',
-          tnm:             [data.tnmT, data.tnmN, data.tnmM].filter(Boolean).join(''),
+          tnm:             tnmStr,
           grade:           data.grade    || '',
           date_diagnostic: data.diagDate || null,
         };
@@ -144,15 +165,38 @@ export default function Page5() {
         });
       }
 
-      // ── 4. Succès ─────────────────────────────────────────────────
       setShowSuccess(true);
 
     } catch (err) {
-      console.error(err);
       setSaveError('Erreur réseau. Vérifiez que le serveur Django est lancé.');
     } finally {
       setSaving(false);
     }
+  };
+
+  const handleReset = () => {
+    update({
+      nom: '', prenom: '', dob: '', age: '', nin: '',
+      tel: '', email: '', sexe: '', famille: '',
+      wilaya: '', commune: '', adresse: '', couverture: '', profession: '',
+      typeT: '', organe: '', lat: '', topo: '', stade: '',
+      tnmT: 'T0', tnmN: 'N0', tnmM: 'M0',
+      localisation: '',
+      localise: true, metastatique: false, recidive: false,
+      diagDate: '', consultDate: '', histo: '', grade: '',
+      taille: '', recepteurs: '', trtActuel: '', dernier_rdv: '', sous_type: '',
+      cea: '', ca199: '', ca125: '', afp: '', psa: '', ca153: '',
+      nfs: '', creat: '', ggt: '', ldh: '', hb: '', tp: '',
+      biopsy: '', biopsyDate: '', como: '', imagerie: [],
+      rechutes: [{ debut: '', fin: '' }],
+      pathos: [],
+      tabac: '', typeTabac: '', paquetsAnnees: '', dureTabac: '',
+      alcool: '', sport: '', freqSport: '', alim: '', alimentRem: '',
+      poids: '', taillep: '', imc: '',
+      antFam: '', antecedents: [''],
+      trtAnt: '', allergies: '', autresAllergies: '', observations: '',
+    });
+    navigate('/page1');
   };
 
   return (
@@ -168,21 +212,7 @@ export default function Page5() {
             </div>
             {createdDossier && <div className="suc-num">{createdDossier}</div>}
             <div style={{ display: 'flex', gap: 10, justifyContent: 'center', flexWrap: 'wrap' }}>
-              <button className="btn btn-ghost" onClick={() => {
-                // Reset form et retourner page1
-                update({
-                  nom: '', prenom: '', dob: '', age: '', nin: '',
-                  tel: '', email: '', sexe: '', famille: '',
-                  wilaya: '', commune: '', adresse: '', couverture: '', profession: '',
-                  typeT: '', organe: '', lat: '', topo: '', stade: '',
-                  tnmT: 'T0', tnmN: 'N0', tnmM: 'M0',
-                  localise: true, metastatique: false, recidive: false,
-                  diagDate: '', consultDate: '', histo: '', grade: '',
-                  taille: '', recepteurs: '', service: '', medecin: '',
-                  trtActuel: '', dernier_rdv: '', sous_type: '',
-                });
-                navigate('/page1');
-              }}>
+              <button className="btn btn-ghost" onClick={handleReset}>
                 ➕ Nouveau patient
               </button>
               <button className="btn btn-primary" onClick={() => navigate('/dashboard')}>
@@ -211,16 +241,20 @@ export default function Page5() {
             <div className="sum-name">{fullName}</div>
             <div className="sum-meta-grid">
               <div className="sum-meta-item">Date de naissance : <b>{data.dob ? fmtDate(data.dob) : '—'}{data.age ? ' · ' + data.age : ''}</b></div>
-              <div className="sum-meta-item">Dossier N° : <b>{data.nin || '—'}</b></div>
+              <div className="sum-meta-item">NIN : <b>{data.nin || '—'}</b></div>
               <div className="sum-meta-item">Téléphone : <b>{data.tel || '—'}</b></div>
               <div className="sum-meta-item">Email : <b>{data.email || '—'}</b></div>
               <div className="sum-meta-item">Wilaya : <b>{data.wilaya || '—'}</b></div>
-              <div className="sum-meta-item">Couverture : <b>{data.couverture || '—'}</b></div>
+              <div className="sum-meta-item">Commune : <b>{data.commune || '—'}</b></div>
             </div>
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 8 }}>
             <span className="badge badge-green">🩺 Nouveau dossier</span>
-            {data.sexe && <span className="badge badge-blue">{data.sexe}</span>}
+            {data.sexe && (
+              <span className="badge badge-blue">
+                {data.sexe.includes('Masculin') || data.sexe === 'M' ? '♂ Masculin' : '♀ Féminin'}
+              </span>
+            )}
           </div>
         </div>
       </div>
@@ -237,16 +271,18 @@ export default function Page5() {
             </div>
             <div className="section-block-body">
               <div className="info-grid">
-                <InfoItem label="Type de tumeur" value={data.typeT} />
-                <InfoItem label="Organe" value={data.organe} />
-                <InfoItem label="Sous-type" value={data.sous_type} />
-                <InfoItem label="Histologie" value={data.histo} />
-                <InfoItem label="Stade" value={data.stade ? 'Stade ' + data.stade : ''} />
-                <InfoItem label="TNM" value={[data.tnmT, data.tnmN, data.tnmM].filter(Boolean).join(' – ')} />
+                <InfoItem label="Type de tumeur"  value={data.typeT} />
+                <InfoItem label="Organe"          value={data.organe} />
+                <InfoItem label="Sous-type"       value={data.sous_type} />
+                <InfoItem label="Histologie"      value={data.histo} />
+                <InfoItem label="Stade"           value={data.stade ? 'Stade ' + data.stade : ''} />
+                <InfoItem label="TNM"             value={[data.tnmT, data.tnmN, data.tnmM].filter(Boolean).join(' – ')} />
                 <InfoItem label="Taille tumorale" value={data.taille} unit=" cm" />
-                <InfoItem label="Récepteurs" value={data.recepteurs} />
+                <InfoItem label="Récepteurs"      value={data.recepteurs} />
+                <InfoItem label="Localisation"    value={getLocalisationLabel(data.localisation)} />
                 <InfoItem label="Date diagnostic" value={data.diagDate ? fmtDate(data.diagDate) : ''} />
-                <InfoItem label="Dernier RDV" value={data.dernier_rdv ? fmtDate(data.dernier_rdv) : ''} />
+                <InfoItem label="Dernier RDV"     value={data.dernier_rdv ? fmtDate(data.dernier_rdv) : ''} />
+                <InfoItem label="Traitement"      value={data.trtActuel} />
               </div>
             </div>
           </div>
@@ -259,22 +295,23 @@ export default function Page5() {
             </div>
             <div className="section-block-body">
               <div className="info-grid">
-                <InfoItem label="CEA" value={data.cea} unit=" ng/mL" />
-                <InfoItem label="CA 19-9" value={data.ca199} unit=" U/mL" />
-                <InfoItem label="PSA" value={data.psa} unit=" ng/mL" />
-                <InfoItem label="Biopsie" value={data.biopsy} />
+                <InfoItem label="CEA"        value={data.cea}   unit=" ng/mL" />
+                <InfoItem label="CA 19-9"    value={data.ca199} unit=" U/mL" />
+                <InfoItem label="PSA"        value={data.psa}   unit=" ng/mL" />
+                <InfoItem label="CA 15-3"    value={data.ca153} unit=" U/mL" />
+                <InfoItem label="Biopsie"    value={data.biopsy} />
                 <InfoItem label="Comorbidités" value={data.como} />
-                <InfoItem label="Imagerie" value={(data.imagerie || []).join(', ')} />
+                <InfoItem label="Imagerie"   value={(data.imagerie || []).join(', ')} />
               </div>
             </div>
           </div>
 
           {/* Completion bars */}
           <SC label="Complétude par section">
-            <CompletionBar label="Infos personnelles" pct={s1} />
+            <CompletionBar label="Infos personnelles"  pct={s1} />
             <CompletionBar label="Diagnostic & Cancer" pct={s2} />
             <CompletionBar label="Données biologiques" pct={s3} />
-            <CompletionBar label="Habitudes de vie" pct={s4} />
+            <CompletionBar label="Habitudes de vie"    pct={s4} />
           </SC>
         </div>
 
@@ -289,12 +326,12 @@ export default function Page5() {
             </div>
             <div className="section-block-body">
               <div className="info-grid">
-                <InfoItem label="Tabagisme" value={data.tabac} />
-                <InfoItem label="Alcool" value={data.alcool} />
+                <InfoItem label="Tabagisme"        value={data.tabac} />
+                <InfoItem label="Alcool"           value={data.alcool} />
                 <InfoItem label="Activité physique" value={data.sport} />
-                <InfoItem label="IMC" value={data.imc ? parseFloat(data.imc).toFixed(1) : ''} />
-                <InfoItem label="Poids" value={data.poids} unit=" kg" />
-                <InfoItem label="Alimentation" value={data.alim} />
+                <InfoItem label="IMC"              value={data.imc ? parseFloat(data.imc).toFixed(1) : ''} />
+                <InfoItem label="Poids"            value={data.poids} unit=" kg" />
+                <InfoItem label="Alimentation"     value={data.alim} />
               </div>
               <div style={{ marginTop: 12 }}>
                 <div className="info-key" style={{ marginBottom: 6 }}>Antécédents familiaux</div>

@@ -1,0 +1,1568 @@
+rcp_descusion
+import React, { useState, useRef, useEffect, useCallback } from 'react';
+
+// ─── API Helper ───────────────────────────────────────────────────────────────
+const API = 'http://localhost:8000/api/';
+
+async function apiFetch(path, options = {}) {
+  const token = localStorage.getItem('access_token');
+  const res = await fetch(`${API}${path}`, {
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    ...options,
+  });
+  if (res.status === 401) { localStorage.clear(); window.location.href = '/auth'; return; }
+  if (!res.ok) { const err = await res.json().catch(() => ({})); throw err; }
+  if (res.status === 204) return {};
+  return res.json();
+}
+
+const urgencyFromStade = (stade = '') => {
+  if (stade.includes('4') || stade.toUpperCase().includes('IV'))  return 'élevée';
+  if (stade.includes('3') || stade.toUpperCase().includes('III')) return 'modérée';
+  return 'faible';
+};
+const urgencyClass = (u) =>
+  u === 'élevée' ? s.urgElevee : u === 'modérée' ? s.urgModeree : s.urgFaible;
+
+// ══════════════════════════════════════════════════════════════════════════════
+export default function DiscussionRCP() {
+
+  // ── State principal ────────────────────────────────────────────────────────
+  const [patients,      setPatients]      = useState([]);
+  const [rcpList,       setRcpList]       = useState([]);
+  const [notifs,        setNotifs]        = useState([]);
+  const [selectedRcp,   setSelectedRcp]   = useState(null);
+  const [loadingRcp,    setLoadingRcp]    = useState(false);
+  const [messageInput,  setMessageInput]  = useState('');
+  const [voteLoading,   setVoteLoading]   = useState(false);
+  const [decisionInput, setDecisionInput] = useState('');
+  const [showDecision,  setShowDecision]  = useState(false);
+  const [isMinimized,   setIsMinimized]   = useState(false);
+  const [isFullscreen,  setIsFullscreen]  = useState(false);
+  const [showNotifs,    setShowNotifs]    = useState(false);
+  const [showMyPatients,setShowMyPatients]= useState(false);
+  const [toast,         setToast]         = useState('');
+
+  // ── State Create RCP Modal ─────────────────────────────────────────────────
+  const [showCreateModal,   setShowCreateModal]   = useState(false);
+  const [createStep,        setCreateStep]        = useState(1); // 1=patient, 2=cancer, 3=doctors+date
+  const [selectedPatient,   setSelectedPatient]   = useState(null);
+  const [patientCancers,    setPatientCancers]     = useState([]);
+  const [selectedCancer,    setSelectedCancer]    = useState(null);
+  const [allMedecins,       setAllMedecins]       = useState([]);
+  const [invitedDoctors,    setInvitedDoctors]    = useState([]);
+  const [meetingDatetime,   setMeetingDatetime]   = useState('');
+  const [presentationReason,setPresentationReason]= useState('');
+  const [createLoading,     setCreateLoading]     = useState(false);
+
+  const chatRef = useRef(null);
+  const unreadCount = notifs.filter(n => !n.is_read).length;
+
+  // ── Toast ──────────────────────────────────────────────────────────────────
+  const showToast = (msg) => { setToast(msg); setTimeout(() => setToast(''), 3500); };
+
+  // ── Chargements initiaux ───────────────────────────────────────────────────
+  const loadPatients = useCallback(async () => {
+    try { const d = await apiFetch('rcp/mes-patients/'); if (d) setPatients(d); } catch {}
+  }, []);
+
+  const loadRcpHistory = useCallback(async () => {
+    try { const d = await apiFetch('rcp/history/'); if (d) setRcpList(d); } catch {}
+  }, []);
+
+  const loadNotifs = useCallback(async () => {
+    try { const d = await apiFetch('rcp/notifications/'); if (d) setNotifs(d); } catch {}
+  }, []);
+
+  useEffect(() => { loadPatients(); loadRcpHistory(); loadNotifs(); }, []);
+
+  // ── Auto-refresh messages 10s ──────────────────────────────────────────────
+  useEffect(() => {
+    if (!selectedRcp) return;
+    const iv = setInterval(async () => {
+      try { const d = await apiFetch(`rcp/${selectedRcp.rcp_id}/`); if (d) setSelectedRcp(d); } catch {}
+    }, 10000);
+    return () => clearInterval(iv);
+  }, [selectedRcp]);
+
+  useEffect(() => {
+    if (chatRef.current) chatRef.current.scrollTop = chatRef.current.scrollHeight;
+  }, [selectedRcp?.messages]);
+
+  // ── Sélectionner RCP ───────────────────────────────────────────────────────
+  const selectRcp = async (rcpId) => {
+    setLoadingRcp(true);
+    try { const d = await apiFetch(`rcp/${rcpId}/`); if (d) { setSelectedRcp(d); setIsMinimized(false); } }
+    catch { showToast('Erreur chargement RCP'); }
+    finally { setLoadingRcp(false); }
+  };
+
+  // ── Notifications ──────────────────────────────────────────────────────────
+  const handleNotifClick = async (notif) => {
+    setShowNotifs(false);
+    try { await apiFetch(`/notifications/${notif.id}/read/`, { method: 'POST' }); } catch {}
+    setNotifs(prev => prev.map(n => n.id === notif.id ? { ...n, is_read: true } : n));
+    if (notif.rcp_id) selectRcp(notif.rcp_id);
+  };
+
+  // ── Chat ───────────────────────────────────────────────────────────────────
+  const sendMessage = async () => {
+    if (!messageInput.trim() || !selectedRcp) return;
+    const text = messageInput.trim();
+    setMessageInput('');
+    try {
+      const msg = await apiFetch(`rcp/${selectedRcp.rcp_id}/chat/`, {
+        method: 'POST', body: JSON.stringify({ message: text }),
+      });
+      if (msg) setSelectedRcp(prev => ({ ...prev, messages: [...prev.messages, msg] }));
+    } catch { showToast('Erreur envoi message'); setMessageInput(text); }
+  };
+
+  // ── Vote ───────────────────────────────────────────────────────────────────
+  const handleVote = async (voteValue) => {
+    if (!selectedRcp) return;
+    setVoteLoading(true);
+    try {
+      const res = await apiFetch(`/rcp/${selectedRcp.rcp_id}/vote/`, {
+        method: 'POST', body: JSON.stringify({ vote: voteValue }),
+      });
+      if (res) { setSelectedRcp(prev => ({ ...prev, vote_summary: res.vote_summary })); showToast(`✓ Vote: ${voteValue}`); }
+    } catch { showToast('Erreur vote'); }
+    finally { setVoteLoading(false); }
+  };
+
+  // ── Démarrer RCP ──────────────────────────────────────────────────────────
+  const handleStartRcp = async () => {
+    if (!selectedRcp) return;
+    try {
+      await apiFetch(`rcp/${selectedRcp.rcp_id}/start/`, { method: 'POST' });
+      showToast('✅ RCP démarrée — Les médecins ont été notifiés');
+      await selectRcp(selectedRcp.rcp_id);
+      loadRcpHistory();
+    } catch (e) {
+      showToast(e?.error || 'Erreur démarrage');
+    }
+  };
+
+  // ── Valider décision ───────────────────────────────────────────────────────
+  const handleValidate = async () => {
+    if (!decisionInput.trim() || !selectedRcp) return;
+    try {
+      await apiFetch(`/rcp/${selectedRcp.rcp_id}/validate/`, {
+        method: 'POST', body: JSON.stringify({ decision_text: decisionInput }),
+      });
+      showToast('✓ Décision validée — Rapport généré');
+      setShowDecision(false); setDecisionInput('');
+      await selectRcp(selectedRcp.rcp_id);
+      loadRcpHistory();
+    } catch { showToast('Erreur validation'); }
+  };
+
+  // ── Télécharger rapport ────────────────────────────────────────────────────
+  const handleDownloadRapport = async () => {
+    if (!selectedRcp) return;
+    try {
+      const res = await apiFetch(`/rcp/${selectedRcp.rcp_id}/rapport/`);
+      if (res?.url) window.open(res.url, '_blank');
+    } catch { showToast('Rapport non disponible'); }
+  };
+
+  // ══════════════════════════════════════════════
+  // CREATE RCP — étapes
+  // ══════════════════════════════════════════════
+
+  const openCreateModal = async () => {
+    setCreateStep(1);
+    setSelectedPatient(null);
+    setSelectedCancer(null);
+    setInvitedDoctors([]);
+    setMeetingDatetime('');
+    setPresentationReason('');
+    setShowCreateModal(true);
+    // Charger médecins
+    try { const d = await apiFetch('auth/users/'); if (d) setAllMedecins(d); } catch {}
+  };
+
+  // Étape 1 → 2 : choisir patient → charger ses cancers
+  const handleSelectPatient = async (patient) => {
+    setSelectedPatient(patient);
+    setSelectedCancer(null);
+    setPatientCancers([]);
+    try {
+      const d = await apiFetch(`patients/${patient.id}/cancers/`);
+      if (d) setPatientCancers(d);
+    } catch { showToast('Erreur chargement cancers'); }
+    setCreateStep(2);
+  };
+
+  // Étape 2 → 3 : choisir cancer
+  const handleSelectCancer = (cancer) => {
+    setSelectedCancer(cancer);
+    setCreateStep(3);
+  };
+
+  // Toggle invitation médecin
+  const toggleDoctor = (id) => {
+    setInvitedDoctors(prev =>
+      prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
+    );
+  };
+
+  // Créer la RCP
+  const handleCreateRcp = async () => {
+    if (!selectedCancer || !meetingDatetime) {
+      showToast('Choisissez un cancer et une date'); return;
+    }
+    setCreateLoading(true);
+    try {
+      const res = await apiFetch('rcp/create/', {
+        method: 'POST',
+        body: JSON.stringify({
+          cancer_id:            selectedCancer.id,
+          meeting_datetime:     meetingDatetime,
+          invited_users:        invitedDoctors,
+          presentation_reason:  presentationReason,
+        }),
+      });
+      showToast('✓ RCP créée avec succès');
+      setShowCreateModal(false);
+      await loadRcpHistory();
+      if (res?.rcp_id) selectRcp(res.rcp_id);
+    } catch { showToast('Erreur création RCP'); }
+    finally { setCreateLoading(false); }
+  };
+
+  // ─────────────────────────────────────────────────────────────────────────
+  return (
+    <div style={s.root}>
+      <style>{`
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        ::-webkit-scrollbar { width: 7px; }
+        ::-webkit-scrollbar-thumb { background: #cbd5e0; border-radius: 4px; }
+        .btn-h:hover { opacity:.85; transform:translateY(-1px); }
+        .card-h:hover { transform:translateY(-3px); box-shadow:0 8px 24px rgba(0,0,0,.1) !important; }
+        .doctor-row:hover { background: #EBF8FF !important; }
+        @keyframes slideIn { from{opacity:0;transform:translateY(-10px)} to{opacity:1;transform:translateY(0)} }
+        @keyframes fadeIn  { from{opacity:0} to{opacity:1} }
+      `}</style>
+
+      {/* ── HEADER ── */}
+      <div style={s.header}>
+        <div style={s.logoSection}>
+          <div style={s.logo}>🏥</div>
+          <span style={s.logoText}>Discussion RCP</span>
+        </div>
+        <div style={s.headerActions}>
+          {/* ➕ Créer RCP */}
+          <button className="btn-h" style={s.createBtn} onClick={openCreateModal}>
+            ➕ Nouvelle RCP
+          </button>
+          <button className="btn-h" style={s.myPatientsBtn} onClick={() => setShowMyPatients(!showMyPatients)}>
+            👥 Mes patients
+          </button>
+          <div style={s.notifIcon} onClick={() => setShowNotifs(!showNotifs)}>
+            🔔 {unreadCount > 0 && <div style={s.notifBadge}>{unreadCount}</div>}
+          </div>
+        </div>
+      </div>
+
+      {/* ══════════════════════════════════════════════
+          MODAL CREATE RCP — 3 étapes
+      ══════════════════════════════════════════════ */}
+      {showCreateModal && (
+        <div style={s.modalOverlay} onClick={() => setShowCreateModal(false)}>
+          <div style={s.modal} onClick={e => e.stopPropagation()}>
+
+            {/* Header modal */}
+            <div style={s.modalHeader}>
+              <div>
+                <h2 style={{ fontSize: 20, color: '#2d3748', fontWeight: 700 }}>
+                  ➕ Créer une RCP
+                </h2>
+                {/* Steps */}
+                <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
+                  {['1. Patient', '2. Cancer', '3. Médecins & Date'].map((label, i) => (
+                    <div key={i} style={{
+                      padding: '4px 12px', borderRadius: 20, fontSize: 12, fontWeight: 700,
+                      background: createStep === i + 1 ? '#4A90E2' : createStep > i + 1 ? '#C6F6D5' : '#EDF2F7',
+                      color:      createStep === i + 1 ? 'white'   : createStep > i + 1 ? '#276749' : '#a0aec0',
+                    }}>
+                      {createStep > i + 1 ? '✓ ' : ''}{label}
+                    </div>
+                  ))}
+                </div>
+              </div>
+              <button style={s.closeBtn} onClick={() => setShowCreateModal(false)}>✕</button>
+            </div>
+
+            <div style={s.modalBody}>
+
+              {/* ── ÉTAPE 1 : Choisir patient ── */}
+              {createStep === 1 && (
+                <div>
+                  <p style={s.stepDesc}>Choisissez le patient pour cette RCP :</p>
+                  <div style={s.patientList}>
+                    {patients.length === 0 && (
+                      <p style={{ color: '#a0aec0', textAlign: 'center', padding: 30 }}>
+                        Aucun patient trouvé
+                      </p>
+                    )}
+                    {patients.map(p => (
+                      <div
+                        key={p.id}
+                        className="card-h"
+                        style={s.patientRow}
+                        onClick={() => handleSelectPatient(p)}
+                      >
+                        <div style={s.patientRowAvatar}>{p.name[0]}</div>
+                        <div style={{ flex: 1 }}>
+                          <div style={{ fontWeight: 700, color: '#2d3748', fontSize: 15 }}>{p.name}</div>
+                          <div style={{ fontSize: 13, color: '#718096', marginTop: 3 }}>
+                            {p.age} ans • {p.numero_dossier}
+                          </div>
+                        </div>
+                        <div style={{ textAlign: 'right' }}>
+                          <div style={{ fontSize: 12, color: '#4A90E2', fontWeight: 600 }}>
+                            🔬 {p.cancers_count} cancer{p.cancers_count > 1 ? 's' : ''}
+                          </div>
+                          {p.stade && <div style={{ fontSize: 12, color: '#718096' }}>Stade {p.stade}</div>}
+                        </div>
+                        <span style={{ color: '#4A90E2', fontSize: 18, marginLeft: 8 }}>›</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* ── ÉTAPE 2 : Choisir cancer ── */}
+              {createStep === 2 && selectedPatient && (
+                <div>
+                  <div style={s.selectedPatientBanner}>
+                    <strong>{selectedPatient.name}</strong> — {selectedPatient.age} ans — {selectedPatient.numero_dossier}
+                  </div>
+                  <p style={s.stepDesc}>
+                    Ce patient a <strong>{patientCancers.length}</strong> cancer(s) enregistré(s).
+                    Choisissez le cancer à discuter :
+                  </p>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                    {patientCancers.map(c => (
+                      <div
+                        key={c.id}
+                        className="card-h"
+                        style={{
+                          ...s.cancerRow,
+                          borderColor: selectedCancer?.id === c.id ? '#4A90E2' : '#e2e8f0',
+                          background:  selectedCancer?.id === c.id ? '#EBF8FF' : 'white',
+                        }}
+                        onClick={() => handleSelectCancer(c)}
+                      >
+                        <div style={{ flex: 1 }}>
+                          <div style={{ fontWeight: 700, color: '#2d3748', fontSize: 15, marginBottom: 6 }}>
+                            🔬 {c.cancer_type}
+                          </div>
+                          <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', fontSize: 13, color: '#718096' }}>
+                            <span>📊 Stade: <strong>{c.stade}</strong></span>
+                            {c.tnm !== '—' && <span>TNM: <strong>{c.tnm}</strong></span>}
+                            {c.grade !== '—' && <span>Grade: <strong>{c.grade}</strong></span>}
+                            {c.date_diagnostic && <span>📅 {c.date_diagnostic}</span>}
+                          </div>
+                        </div>
+                        <div style={{ textAlign: 'right' }}>
+                          {c.rcp_count > 0 && (
+                            <div style={{ fontSize: 12, color: '#718096' }}>
+                              {c.rcp_count} RCP précédente(s)
+                            </div>
+                          )}
+                          {selectedCancer?.id === c.id && (
+                            <div style={{ fontSize: 18, color: '#4A90E2' }}>✓</div>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                  <div style={s.stepBtns}>
+                    <button style={s.btnSecondary} onClick={() => setCreateStep(1)}>← Retour</button>
+                    <button
+                      className="btn-h"
+                      style={{ ...s.btnPrimary, opacity: selectedCancer ? 1 : 0.5 }}
+                      disabled={!selectedCancer}
+                      onClick={() => selectedCancer && setCreateStep(3)}
+                    >
+                      Suivant →
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* ── ÉTAPE 3 : Médecins + Date ── */}
+              {createStep === 3 && selectedCancer && (
+                <div>
+                  <div style={s.selectedPatientBanner}>
+                    <strong>{selectedPatient.name}</strong> — 🔬 {selectedCancer.cancer_type} — Stade {selectedCancer.stade}
+                  </div>
+
+                  {/* Date */}
+                  <div style={s.fieldGroup}>
+                    <label style={s.fieldLabel}>📅 Date et heure de la réunion *</label>
+                    <input
+                      type="datetime-local"
+                      style={s.input}
+                      value={meetingDatetime}
+                      onChange={e => setMeetingDatetime(e.target.value)}
+                    />
+                  </div>
+
+                  {/* Raison */}
+                  <div style={s.fieldGroup}>
+                    <label style={s.fieldLabel}>📝 Raison de présentation</label>
+                    <textarea
+                      rows={2}
+                      style={{ ...s.input, resize: 'none' }}
+                      placeholder="Ex: Tumeur 4.2cm, stade avancé..."
+                      value={presentationReason}
+                      onChange={e => setPresentationReason(e.target.value)}
+                    />
+                  </div>
+
+                  {/* Médecins à inviter */}
+                  <div style={s.fieldGroup}>
+                    <label style={s.fieldLabel}>
+                      👥 Inviter des médecins ({invitedDoctors.length} sélectionné{invitedDoctors.length !== 1 ? 's' : ''})
+                    </label>
+                    <div style={s.doctorList}>
+                      {allMedecins.length === 0 && (
+                        <p style={{ color: '#a0aec0', fontSize: 13, padding: 12 }}>Aucun médecin disponible</p>
+                      )}
+                      {allMedecins.map(m => {
+                        const isSelected = invitedDoctors.includes(m.id);
+                        return (
+                          <div
+                            key={m.id}
+                            className="doctor-row"
+                            style={{
+                              ...s.doctorRow,
+                              background: isSelected ? '#EBF8FF' : 'white',
+                              borderColor: isSelected ? '#4A90E2' : '#e2e8f0',
+                            }}
+                            onClick={() => toggleDoctor(m.id)}
+                          >
+                            <div style={{ ...s.doctorAvatar, background: isSelected ? '#4A90E2' : '#EDF2F7', color: isSelected ? 'white' : '#4a5568' }}>
+                              {(m.name || '?')[0].toUpperCase()}
+                            </div>
+                            <div style={{ flex: 1 }}>
+                              <div style={{ fontWeight: 600, fontSize: 14, color: '#2d3748' }}>{m.name}</div>
+                              <div style={{ fontSize: 12, color: '#718096' }}>{m.role} • {m.email}</div>
+                            </div>
+                            <div style={{ fontSize: 18, color: isSelected ? '#4A90E2' : '#e2e8f0' }}>
+                              {isSelected ? '✓' : '○'}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  <div style={s.stepBtns}>
+                    <button style={s.btnSecondary} onClick={() => setCreateStep(2)}>← Retour</button>
+                    <button
+                      className="btn-h"
+                      style={{ ...s.btnPrimary, opacity: (!meetingDatetime || createLoading) ? 0.5 : 1 }}
+                      disabled={!meetingDatetime || createLoading}
+                      onClick={handleCreateRcp}
+                    >
+                      {createLoading ? '...' : '🚀 Créer la RCP'}
+                    </button>
+                  </div>
+                </div>
+              )}
+
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── PANEL NOTIFICATIONS ── */}
+      {showNotifs && (
+        <div style={s.notifsPanel}>
+          <div style={s.notifsHeader}>
+            <h3 style={{ fontSize: 16, color: '#2d3748' }}>Notifications</h3>
+            <button style={s.closeBtn} onClick={() => setShowNotifs(false)}>✕</button>
+          </div>
+          <div style={{ maxHeight: 400, overflowY: 'auto' }}>
+            {notifs.length === 0 && <p style={{ padding: 20, textAlign: 'center', color: '#a0aec0' }}>Aucune notification</p>}
+            {notifs.map(notif => (
+              <div key={notif.id}
+                style={{ ...s.notifItem, background: notif.is_read ? 'white' : '#EBF8FF' }}
+                onClick={() => handleNotifClick(notif)}>
+                <div style={{ fontSize: 13, fontWeight: 700, color: '#2d3748', marginBottom: 3 }}>📋 {notif.patient || 'RCP'}</div>
+                <div style={{ fontSize: 12, color: '#718096' }}>{notif.message}</div>
+                <div style={{ fontSize: 11, color: '#a0aec0', marginTop: 3 }}>{new Date(notif.created_at).toLocaleString('fr-FR')}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* ── VUE MES PATIENTS ── */}
+      {showMyPatients && (
+        <div style={s.overlay}>
+          <div style={s.overlayHeader}>
+            <h2 style={{ fontSize: 22, color: '#2d3748' }}>📋 Mes Patients & Réunions RCP</h2>
+            <button style={s.closeBtn} onClick={() => setShowMyPatients(false)}>✕ Fermer</button>
+          </div>
+          <div style={s.statsGrid}>
+            {[
+              [patients.length, 'Total Patients'],
+              [rcpList.filter(r => r.status === 'ongoing').length, 'RCP Actives'],
+              [rcpList.length, 'RCP Total'],
+              [rcpList.filter(r => r.status === 'closed').length, 'Clôturées'],
+            ].map(([val, label]) => (
+              <div key={label} style={s.statCard}>
+                <div style={s.statValue}>{val}</div>
+                <div style={s.statLabel}>{label}</div>
+              </div>
+            ))}
+          </div>
+          <h3 style={{ fontSize: 17, color: '#2d3748', marginBottom: 14 }}>📅 Historique des RCP</h3>
+          <div style={s.rcpGrid}>
+            {rcpList.map(rcp => (
+              <div key={rcp.id} className="card-h" style={s.rcpCard}
+                onClick={() => { setShowMyPatients(false); selectRcp(rcp.id); }}>
+                <div style={{ fontWeight: 700, color: '#2d3748', fontSize: 15, marginBottom: 5 }}>{rcp.patient}</div>
+                <div style={{ fontSize: 13, color: '#718096', marginBottom: 8 }}>{rcp.cancer_type} • Stade {rcp.stade}</div>
+                <span style={{
+                  padding: '4px 10px', borderRadius: 8, fontSize: 12, fontWeight: 600,
+                  background: rcp.status === 'ongoing' ? '#C6F6D5' : '#EDF2F7',
+                  color: rcp.status === 'ongoing' ? '#276749' : '#4a5568',
+                }}>
+                  {rcp.status === 'ongoing' ? '🟢 En cours' : '✓ Clôturée'}
+                </span>
+                <div style={{ fontSize: 12, color: '#a0aec0', marginTop: 8 }}>
+                  📅 {new Date(rcp.date).toLocaleDateString('fr-FR')} • 👥 {rcp.participants_count}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* ── LAYOUT PRINCIPAL ── */}
+      <div style={{ ...s.mainLayout, gridTemplateColumns: isFullscreen ? '1fr' : '290px 1fr' }}>
+
+        {/* SIDEBAR */}
+        {!isFullscreen && (
+          <div style={s.sidebar}>
+            <div style={{ fontSize: 11, fontWeight: 700, color: '#a0aec0', textTransform: 'uppercase', marginBottom: 10 }}>
+              RCP récentes
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 9 }}>
+              {rcpList.slice(0, 15).map(rcp => {
+                const isActive = selectedRcp?.rcp_id === rcp.id;
+                return (
+                  <div key={rcp.id} className="card-h"
+                    style={{ ...s.rcpSidebarCard, ...(isActive ? s.rcpSidebarActive : {}) }}
+                    onClick={() => selectRcp(rcp.id)}>
+                    <div style={{ fontWeight: 600, color: '#2d3748', fontSize: 13, marginBottom: 4 }}>{rcp.patient}</div>
+                    <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap' }}>
+                      <span style={s.stageBadge}>Stade {rcp.stade}</span>
+                      <span style={{ ...s.urgBadge, ...urgencyClass(urgencyFromStade(rcp.stade)) }}>
+                        {urgencyFromStade(rcp.stade)}
+                      </span>
+                      {rcp.status === 'ongoing'    && <span style={s.statusActive}>🟢</span>}
+                      {rcp.status === 'scheduled'  && <span style={{ fontSize: 11, color: '#C05621' }}>⏳</span>}
+                    </div>
+                  </div>
+                );
+              })}
+              {rcpList.length === 0 && (
+                <div style={{ textAlign: 'center', padding: 30, color: '#a0aec0', fontSize: 13 }}>
+                  <div style={{ fontSize: 30, marginBottom: 8 }}>💬</div>
+                  Aucune RCP<br />
+                  <button className="btn-h" style={{ ...s.createBtn, marginTop: 12, fontSize: 12 }} onClick={openCreateModal}>
+                    ➕ Créer
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* CONTENU PRINCIPAL */}
+        <div style={s.mainContent}>
+
+          {/* Header patient */}
+          <div style={{ ...s.patientHeaderBar, padding: isMinimized ? '13px 26px' : '20px 26px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                <div style={s.patientIcon}>👤</div>
+                <h2 style={{ fontSize: isMinimized ? 16 : 20, color: '#2d3748', fontWeight: 700 }}>
+                  {loadingRcp ? '...' : selectedRcp ? selectedRcp.patient : 'Sélectionnez une RCP'}
+                </h2>
+                {selectedRcp && (
+                  <span style={{
+                    padding: '3px 10px', borderRadius: 8, fontSize: 12, fontWeight: 700,
+                    background: selectedRcp.status === 'ongoing' ? '#C6F6D5' : '#EDF2F7',
+                    color: selectedRcp.status === 'ongoing' ? '#276749' : '#4a5568',
+                  }}>
+                    {selectedRcp.status === 'ongoing' ? '🟢 En cours' : '✓ Clôturée'}
+                  </span>
+                )}
+              </div>
+              <div style={{ display: 'flex', gap: 8 }}>
+                {selectedRcp?.rapport_url && (
+                  <button className="btn-h" style={s.rapportBtn} onClick={handleDownloadRapport}>
+                    📄 Rapport
+                  </button>
+                )}
+                {selectedRcp && (
+                  <>
+                    <button className="btn-h" style={s.iconBtn} onClick={() => setIsFullscreen(!isFullscreen)}>
+                      {isFullscreen ? '⊡' : '⊞'}
+                    </button>
+                    <button className="btn-h" style={s.iconBtn} onClick={() => setIsMinimized(!isMinimized)}>
+                      {isMinimized ? '▼' : '▲'}
+                    </button>
+                  </>
+                )}
+              </div>
+            </div>
+
+            {!isMinimized && selectedRcp && (
+              <div style={{ marginTop: 12, display: 'flex', gap: 18, flexWrap: 'wrap', fontSize: 13, color: '#718096' }}>
+                <span>📋 <strong>{selectedRcp.numero_dossier}</strong></span>
+                <span>🎂 {selectedRcp.age} ans</span>
+                <span>🔬 {selectedRcp.cancer_type}</span>
+                <span>📊 Stade <strong>{selectedRcp.stade}</strong></span>
+                {selectedRcp.tnm && <span>TNM <strong>{selectedRcp.tnm}</strong></span>}
+                <span>📅 {new Date(selectedRcp.date).toLocaleDateString('fr-FR')}</span>
+              </div>
+            )}
+          </div>
+
+          {/* Chat zone */}
+          <div ref={chatRef} style={s.chatWrapper}>
+            <div style={{ padding: 26 }}>
+              {loadingRcp ? (
+                <div style={{ textAlign: 'center', padding: 60, color: '#a0aec0' }}>
+                  <div style={{ fontSize: 30 }}>⟳</div>
+                  <div style={{ marginTop: 8 }}>Chargement...</div>
+                </div>
+              ) : !selectedRcp ? (
+                <div style={{ textAlign: 'center', padding: 60, color: '#a0aec0' }}>
+                  <div style={{ fontSize: 50, marginBottom: 12 }}>💬</div>
+                  <div style={{ fontWeight: 600, fontSize: 16 }}>Sélectionnez une RCP dans la liste</div>
+                  <div style={{ fontSize: 13, marginTop: 6, marginBottom: 20 }}>ou créez-en une nouvelle</div>
+                  <button className="btn-h" style={s.createBtn} onClick={openCreateModal}>
+                    ➕ Créer une RCP
+                  </button>
+                </div>
+              ) : (
+                <>
+                  {/* ── RCP مجدولة — مغلوقة ── */}
+                  {selectedRcp.status === 'scheduled' && (
+                    <div style={s.scheduledBanner}>
+                      <div style={{ fontSize: 32, marginBottom: 10 }}>⏳</div>
+                      <div style={{ fontWeight: 700, fontSize: 16, color: '#744210', marginBottom: 6 }}>
+                        RCP مجدولة — لم تبدأ بعد
+                      </div>
+                      <div style={{ fontSize: 13, color: '#92400e', marginBottom: 16 }}>
+                        📅 {new Date(selectedRcp.date).toLocaleDateString('fr-FR')} الساعة {new Date(selectedRcp.date).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}
+                      </div>
+                      {/* زر Démarrer — فقط للمنشئ */}
+                      {selectedRcp.is_creator && (
+                        <button
+                          className="btn-h"
+                          style={s.startBtn}
+                          onClick={handleStartRcp}
+                        >
+                          ▶ Démarrer la réunion
+                        </button>
+                      )}
+                      {!selectedRcp.is_creator && (
+                        <div style={{ fontSize: 13, color: '#92400e', fontStyle: 'italic' }}>
+                          ⏸ En attente du démarrage par le médecin responsable
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* ── Participants ── */}
+                  <div style={s.panel}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 12 }}>
+                      <span style={{ fontWeight: 700, color: '#2d3748', fontSize: 15 }}>👥 Participants</span>
+                      <span style={s.countBadge}>{selectedRcp.participants?.length || 0}</span>
+                    </div>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                      {(selectedRcp.participants || []).map((p, i) => (
+                        <div key={i} style={s.participantChip}>
+                          <div style={s.participantAvatar}>{(p.name || '?')[0].toUpperCase()}</div>
+                          <span style={{ fontSize: 13, color: '#4a5568' }}>{p.name}</span>
+                          <span style={{ fontSize: 11, color: '#a0aec0' }}>• {p.role}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Discussion */}
+                  <div style={s.panel}>
+                    <h3 style={{ fontSize: 15, color: '#2d3748', fontWeight: 700, marginBottom: 16, borderBottom: '2px solid #e2e8f0', paddingBottom: 10 }}>
+                      💬 Discussion
+                    </h3>
+
+                    {(selectedRcp.messages || []).length === 0 ? (
+                      <p style={{ color: '#a0aec0', textAlign: 'center', padding: 28 }}>Aucun message</p>
+                    ) : (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 14, marginBottom: 18 }}>
+                        {(selectedRcp.messages || []).map((msg, i) => (
+                          <div key={i} style={{ display: 'flex', gap: 10 }}>
+                            <div style={s.msgAvatar}>{(msg.user || '?')[0].toUpperCase()}</div>
+                            <div style={{ flex: 1 }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+                                <span style={{ fontWeight: 700, color: '#2d3748', fontSize: 13 }}>{msg.user}</span>
+                                <span style={{ color: '#a0aec0', fontSize: 11 }}>{msg.time} — {msg.date}</span>
+                              </div>
+                              <div style={s.msgBubble}>{msg.message}</div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    {/* Vote */}
+                    {selectedRcp.status === 'ongoing' && (
+                      <div style={s.voteSection}>
+                        <div style={{ fontWeight: 700, color: '#2d3748', marginBottom: 12 }}>🗳️ Vote</div>
+                        <div style={{ display: 'flex', gap: 10, marginBottom: 12, flexWrap: 'wrap' }}>
+                          {[
+                            { v: 'approve', label: '✔ Approuver', bg: '#C6F6D5', color: '#276749' },
+                            { v: 'reject',  label: '✘ Rejeter',   bg: '#FED7D7', color: '#C53030' },
+                            { v: 'abstain', label: '— Abstention', bg: '#EDF2F7', color: '#4a5568' },
+                          ].map(({ v, label, bg, color }) => (
+                            <button key={v} className="btn-h" disabled={voteLoading}
+                              style={{ padding: '9px 18px', background: bg, color, border: 'none', borderRadius: 9, fontSize: 13, fontWeight: 700, cursor: 'pointer', transition: 'all .2s' }}
+                              onClick={() => handleVote(v)}>
+                              {label}
+                            </button>
+                          ))}
+                        </div>
+                        {selectedRcp.vote_summary && (
+                          <div style={{ display: 'flex', gap: 14, fontSize: 13, color: '#718096' }}>
+                            <span>✔ <strong>{selectedRcp.vote_summary.approve}</strong></span>
+                            <span>✘ <strong>{selectedRcp.vote_summary.reject}</strong></span>
+                            <span>— <strong>{selectedRcp.vote_summary.abstain}</strong></span>
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Décision validée */}
+                    {selectedRcp.decision && (
+                      <div style={s.decisionBox}>
+                        <div style={{ fontWeight: 700, color: '#D68910', marginBottom: 8, fontSize: 14 }}>✅ Décision Validée</div>
+                        <div style={{ color: '#4a5568', lineHeight: 1.6 }}>{selectedRcp.decision}</div>
+                        {selectedRcp.rapport_url && (
+                          <button className="btn-h"
+                            style={{ marginTop: 10, padding: '7px 16px', background: '#4A90E2', color: 'white', border: 'none', borderRadius: 8, cursor: 'pointer', fontWeight: 600, fontSize: 13 }}
+                            onClick={handleDownloadRapport}>
+                            📄 Télécharger PDF
+                          </button>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Bouton valider */}
+                    {selectedRcp.status === 'ongoing' && !selectedRcp.decision && (
+                      <div style={{ marginTop: 18 }}>
+                        {!showDecision ? (
+                          <button className="btn-h"
+                            style={{ padding: '9px 20px', background: 'linear-gradient(135deg,#4A90E2,#5CA0F2)', color: 'white', border: 'none', borderRadius: 9, cursor: 'pointer', fontWeight: 700, fontSize: 13 }}
+                            onClick={() => setShowDecision(true)}>
+                            📝 Valider une Décision
+                          </button>
+                        ) : (
+                          <div style={{ background: '#FEF5E7', borderRadius: 12, padding: 16, border: '1px solid #F6AD55' }}>
+                            <div style={{ fontWeight: 700, marginBottom: 8, color: '#744210', fontSize: 14 }}>Décision finale</div>
+                            <textarea rows={3}
+                              style={{ width: '100%', padding: 10, borderRadius: 8, border: '1px solid #DDE4F3', fontSize: 13, resize: 'none', marginBottom: 10 }}
+                              placeholder="Saisissez la décision thérapeutique..."
+                              value={decisionInput}
+                              onChange={e => setDecisionInput(e.target.value)}
+                            />
+                            <div style={{ display: 'flex', gap: 8 }}>
+                              <button className="btn-h"
+                                style={{ padding: '8px 18px', background: '#48BB78', color: 'white', border: 'none', borderRadius: 8, cursor: 'pointer', fontWeight: 700, fontSize: 13 }}
+                                onClick={handleValidate}>
+                                ✔ Confirmer
+                              </button>
+                              <button style={{ padding: '8px 16px', background: '#EDF2F7', color: '#4a5568', border: 'none', borderRadius: 8, cursor: 'pointer', fontSize: 13 }}
+                                onClick={() => { setShowDecision(false); setDecisionInput(''); }}>
+                                Annuler
+                              </button>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+
+          {/* Input message */}
+          {selectedRcp && selectedRcp.status === 'ongoing' && (
+            <div style={s.inputArea}>
+              <input type="text"
+                placeholder="Écrire un commentaire... (Entrée pour envoyer)"
+                style={s.msgInput}
+                value={messageInput}
+                onChange={e => setMessageInput(e.target.value)}
+                onKeyPress={e => e.key === 'Enter' && sendMessage()}
+              />
+              <button className="btn-h" style={s.sendBtn} onClick={sendMessage}>Envoyer ➤</button>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Toast */}
+      {toast && <div style={s.toast}>{toast}</div>}
+    </div>
+  );
+}
+
+// ─── STYLES ──────────────────────────────────────────────────────────────────
+const s = {
+  root:           { minHeight: '100vh', background: 'linear-gradient(135deg,#e3e8f7,#f0e7f7)', fontFamily: '-apple-system, BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif' },
+  header:         { display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px 32px', background: 'white', boxShadow: '0 2px 10px rgba(0,0,0,.06)' },
+  logoSection:    { display: 'flex', alignItems: 'center', gap: 12 },
+  logo:           { width: 42, height: 42, background: 'linear-gradient(135deg,#4A90E2,#5CA0F2)', borderRadius: 11, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20 },
+  logoText:       { fontSize: 20, color: '#2d3748', fontWeight: 700 },
+  headerActions:  { display: 'flex', alignItems: 'center', gap: 12 },
+  createBtn:      { padding: '9px 18px', background: 'linear-gradient(135deg,#4A90E2,#5CA0F2)', color: 'white', border: 'none', borderRadius: 10, fontSize: 13, fontWeight: 700, cursor: 'pointer', transition: 'all .2s' },
+  myPatientsBtn:  { padding: '9px 16px', background: '#EDF2F7', color: '#4A90E2', border: 'none', borderRadius: 10, fontSize: 13, fontWeight: 700, cursor: 'pointer', transition: 'all .2s' },
+  notifIcon:      { width: 38, height: 38, borderRadius: '50%', background: '#f7fafc', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', fontSize: 17, position: 'relative' },
+  notifBadge:     { position: 'absolute', top: 3, right: 3, width: 17, height: 17, background: '#E53E3E', borderRadius: '50%', color: 'white', fontSize: 9, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center' },
+  // Modal
+  modalOverlay:   { position: 'fixed', inset: 0, background: 'rgba(0,0,0,.5)', zIndex: 2000, display: 'flex', alignItems: 'center', justifyContent: 'center', animation: 'fadeIn .2s', padding: 16 },
+  modal:          { background: 'white', borderRadius: 18, width: '100%', maxWidth: 580, maxHeight: '90vh', overflow: 'hidden', display: 'flex', flexDirection: 'column', boxShadow: '0 20px 60px rgba(0,0,0,.3)', animation: 'slideIn .2s' },
+  modalHeader:    { padding: '22px 26px 16px', borderBottom: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexShrink: 0 },
+  modalBody:      { padding: '20px 26px', overflowY: 'auto', flex: 1 },
+  stepDesc:       { fontSize: 14, color: '#718096', marginBottom: 14 },
+  patientList:    { display: 'flex', flexDirection: 'column', gap: 10, maxHeight: 360, overflowY: 'auto' },
+  patientRow:     { display: 'flex', alignItems: 'center', gap: 12, padding: '13px 16px', background: '#f7fafc', borderRadius: 12, cursor: 'pointer', border: '2px solid transparent', transition: 'all .2s' },
+  patientRowAvatar:{ width: 40, height: 40, borderRadius: '50%', background: 'linear-gradient(135deg,#4A90E2,#5CA0F2)', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16, fontWeight: 700, flexShrink: 0 },
+  selectedPatientBanner: { background: '#EBF8FF', borderRadius: 10, padding: '10px 14px', fontSize: 13, color: '#2b6cb0', marginBottom: 14, border: '1px solid #BEE3F8' },
+  cancerRow:      { display: 'flex', alignItems: 'center', gap: 12, padding: '14px 16px', borderRadius: 12, cursor: 'pointer', border: '2px solid', transition: 'all .2s' },
+  fieldGroup:     { marginBottom: 16 },
+  fieldLabel:     { display: 'block', fontSize: 13, fontWeight: 700, color: '#4a5568', marginBottom: 7 },
+  input:          { width: '100%', padding: '10px 13px', border: '1.5px solid #e2e8f0', borderRadius: 9, fontSize: 13, outline: 'none', fontFamily: 'inherit' },
+  doctorList:     { maxHeight: 220, overflowY: 'auto', border: '1px solid #e2e8f0', borderRadius: 10, overflow: 'hidden' },
+  doctorRow:      { display: 'flex', alignItems: 'center', gap: 10, padding: '11px 14px', cursor: 'pointer', border: '1px solid', borderLeft: 'none', borderRight: 'none', borderTop: 'none', transition: 'all .15s' },
+  doctorAvatar:   { width: 34, height: 34, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 700, flexShrink: 0, transition: 'all .2s' },
+  stepBtns:       { display: 'flex', justifyContent: 'space-between', marginTop: 20 },
+  btnPrimary:     { padding: '10px 22px', background: 'linear-gradient(135deg,#4A90E2,#5CA0F2)', color: 'white', border: 'none', borderRadius: 10, fontSize: 14, fontWeight: 700, cursor: 'pointer', transition: 'all .2s' },
+  btnSecondary:   { padding: '10px 18px', background: '#EDF2F7', color: '#4a5568', border: 'none', borderRadius: 10, fontSize: 13, cursor: 'pointer' },
+  closeBtn:       { background: 'none', border: 'none', fontSize: 17, color: '#a0aec0', cursor: 'pointer', padding: '4px 8px' },
+  // Notifications
+  notifsPanel:    { position: 'fixed', top: 75, right: 18, width: 360, maxHeight: 480, background: 'white', borderRadius: 14, boxShadow: '0 8px 30px rgba(0,0,0,.15)', overflow: 'hidden', zIndex: 1000, animation: 'slideIn .2s' },
+  notifsHeader:   { padding: '14px 18px', borderBottom: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' },
+  notifItem:      { padding: '12px 18px', borderBottom: '1px solid #f7fafc', cursor: 'pointer', transition: 'background .2s' },
+  // Overlay
+  overlay:        { position: 'fixed', top: 76, left: 0, right: 0, bottom: 0, background: '#f7fafc', zIndex: 999, overflowY: 'auto', padding: '26px 30px', animation: 'slideIn .2s' },
+  overlayHeader:  { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 22 },
+  statsGrid:      { display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 14, marginBottom: 24 },
+  statCard:       { background: 'white', padding: 20, borderRadius: 13, boxShadow: '0 2px 8px rgba(0,0,0,.06)' },
+  statValue:      { fontSize: 28, fontWeight: 800, color: '#2d3748', marginBottom: 4 },
+  statLabel:      { fontSize: 12, color: '#718096' },
+  rcpGrid:        { display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 14 },
+  rcpCard:        { background: 'white', padding: 20, borderRadius: 13, boxShadow: '0 2px 8px rgba(0,0,0,.06)', cursor: 'pointer', transition: 'all .25s' },
+  // Layout
+  mainLayout:     { display: 'grid', height: 'calc(100vh - 76px)', overflow: 'hidden', transition: 'all .3s' },
+  sidebar:        { background: '#f7fafc', padding: 18, overflowY: 'auto', borderRight: '1px solid #e2e8f0' },
+  rcpSidebarCard: { background: 'white', padding: 12, borderRadius: 11, cursor: 'pointer', transition: 'all .2s', border: '2px solid transparent' },
+  rcpSidebarActive: { borderColor: '#4A90E2', boxShadow: '0 4px 12px rgba(74,144,226,.2)' },
+  stageBadge:     { padding: '2px 7px', borderRadius: 5, background: '#EDF2F7', color: '#4a5568', fontSize: 11 },
+  urgBadge:       { padding: '2px 7px', borderRadius: 5, fontSize: 11 },
+  urgElevee:      { background: '#FED7D7', color: '#C53030' },
+  urgModeree:     { background: '#FEEBC8', color: '#C05621' },
+  urgFaible:      { background: '#C6F6D5', color: '#2F855A' },
+  statusActive:   { fontSize: 11 },
+  mainContent:    { background: 'white', display: 'flex', flexDirection: 'column', overflow: 'hidden' },
+  patientHeaderBar:{ background: 'white', borderBottom: '1px solid #e2e8f0', transition: 'all .2s' },
+  patientIcon:    { width: 36, height: 36, background: 'linear-gradient(135deg,#4A90E2,#5CA0F2)', borderRadius: 9, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 17 },
+  rapportBtn:     { padding: '6px 14px', background: '#C6F6D5', color: '#276749', border: 'none', borderRadius: 8, cursor: 'pointer', fontWeight: 700, fontSize: 12, transition: 'all .2s' },
+  iconBtn:        { background: '#EDF2F7', border: 'none', width: 32, height: 32, borderRadius: 7, cursor: 'pointer', fontSize: 15, transition: 'all .2s', display: 'flex', alignItems: 'center', justifyContent: 'center' },
+  chatWrapper:    { flex: 1, overflowY: 'auto', background: '#f7fafc' },
+  panel:          { background: 'white', borderRadius: 13, padding: 20, marginBottom: 18, boxShadow: '0 2px 8px rgba(0,0,0,.05)' },
+  countBadge:     { background: '#4A90E2', color: 'white', padding: '2px 9px', borderRadius: 5, fontSize: 12, fontWeight: 700 },
+  participantChip:{ display: 'flex', alignItems: 'center', gap: 7, padding: '6px 11px', background: '#f7fafc', borderRadius: 8 },
+  participantAvatar:{ width: 26, height: 26, borderRadius: '50%', background: 'linear-gradient(135deg,#4A90E2,#5CA0F2)', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 700, flexShrink: 0 },
+  msgAvatar:      { width: 36, height: 36, borderRadius: '50%', background: 'linear-gradient(135deg,#4A90E2,#5CA0F2)', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 700, flexShrink: 0 },
+  msgBubble:      { background: '#f7fafc', padding: '10px 13px', borderRadius: 9, color: '#4a5568', lineHeight: 1.5, fontSize: 13, borderLeft: '3px solid #4A90E2' },
+  voteSection:    { background: '#F7FAFC', borderRadius: 10, padding: 14, marginTop: 14, borderTop: '2px solid #e2e8f0' },
+  decisionBox:    { background: '#FEF5E7', borderRadius: 11, padding: 16, borderLeft: '4px solid #F39C12', marginTop: 14 },
+  inputArea:      { padding: '16px 26px', background: 'white', borderTop: '1px solid #e2e8f0', display: 'flex', gap: 10 },
+  msgInput:       { flex: 1, padding: '10px 14px', border: '1px solid #e2e8f0', borderRadius: 9, fontSize: 13, outline: 'none' },
+  sendBtn:        { padding: '10px 22px', background: 'linear-gradient(135deg,#5CA0F2,#4A90E2)', color: 'white', border: 'none', borderRadius: 9, fontSize: 13, fontWeight: 700, cursor: 'pointer', transition: 'all .2s' },
+  startBtn:       { padding: '11px 28px', background: 'linear-gradient(135deg,#48BB78,#38A169)', color: 'white', border: 'none', borderRadius: 10, fontSize: 15, fontWeight: 700, cursor: 'pointer', transition: 'all .2s', boxShadow: '0 4px 14px rgba(72,187,120,.4)' },
+  scheduledBanner:{ background: '#FFFBEB', borderRadius: 14, padding: '28px 20px', textAlign: 'center', border: '2px solid #F6AD55', marginBottom: 18 },
+  toast:          { position: 'fixed', bottom: 20, right: 20, background: 'linear-gradient(135deg,#4A90E2,#5CA0F2)', color: 'white', padding: '12px 20px', borderRadius: 11, fontSize: 13, fontWeight: 700, boxShadow: '0 10px 28px rgba(74,144,226,.4)', zIndex: 9999 },
+};
+
+veiw
+
+from django.shortcuts import get_object_or_404
+from django.contrib.auth import get_user_model
+from django.core.files.base import ContentFile
+from rest_framework.decorators import api_view, permission_classes
+from rest_framework.permissions import IsAuthenticated, AllowAny
+from rest_framework.response import Response
+from io import BytesIO
+
+# ✅ Import depuis patients
+from patients.models import Cancer, Patient
+
+from .models import (
+    RcpMeeting, RcpParticipant, RcpDiscussion,
+    RcpVote, RcpDecision, RcpRapport, Notification
+)
+
+User = get_user_model()
+
+
+# ══════════════════════════════════════════════
+# 🟢 MES PATIENTS
+# ══════════════════════════════════════════════
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def mes_patients(request):
+    # 🔥 نعرض المرضى الذين أنشأهم الطبيب 
+
+    patients = Patient.objects.filter( 
+
+        created_by=request.user 
+
+    ).order_by('-created_at') 
+    data = []
+    for p in patients:
+        cancer = p.cancers.order_by('-created_at').first()
+        data.append({
+            "id":             p.id,
+            "name":           p.full_name,
+            "age":            p.age,
+            "numero_dossier": p.numero_dossier,
+            "sexe":           p.sexe,
+            "stade":          cancer.stade_clinique if cancer else "",
+            "cancer_type":    str(cancer.cancer_type) if cancer and cancer.cancer_type else "",
+            "cancer_id":      cancer.id if cancer else None,
+            "cancers_count":  p.cancers.count(),
+        })
+    return Response(data)
+
+
+# ══════════════════════════════════════════════
+# 🟢 CANCERS D'UN PATIENT — اختيار عند إنشاء RCP
+# ══════════════════════════════════════════════
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def patient_cancers(request, patient_id):
+    """يرجع كل سرطانات مريض — باش تختاري واحد عند إنشاء RCP"""
+    patient = get_object_or_404(Patient, id=patient_id)
+    cancers = patient.cancers.select_related('cancer_type').order_by('-created_at')
+
+    data = []
+    for c in cancers:
+        rcp_count = RcpMeeting.objects.filter(cancer=c).count()
+        data.append({
+            "id":              c.id,
+            "cancer_type":     str(c.cancer_type) if c.cancer_type else "Non spécifié",
+            "stade":           c.stade_clinique or "—",
+            "tnm":             c.tnm or "—",
+            "grade":           c.grade or "—",
+            "date_diagnostic": str(c.date_diagnostic) if c.date_diagnostic else None,
+            "rcp_count":       rcp_count,
+        })
+
+    return Response({
+        "patient_id":     patient.id,
+        "patient_name":   patient.full_name,
+        "age":            patient.age,
+        "numero_dossier": patient.numero_dossier,
+        "cancers":        data,
+    })
+
+
+# ══════════════════════════════════════════════
+# 🟢 LISTE MÉDECINS — للدعوة
+# ══════════════════════════════════════════════
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def list_medecins(request):
+    """كل الأطباء — باش تدعوهم في الـ RCP"""
+    users = User.objects.filter(
+        role__in=['medecin', 'biologiste']
+    ).exclude(id=request.user.id)
+
+    data = []
+    for u in users:
+        data.append({
+            "id":       u.id,
+            "name":     u.get_full_name() or u.username,
+            "email":    u.email,
+            "role":     u.role,
+        })
+    return Response(data)
+
+
+# ══════════════════════════════════════════════
+# 🟢 CREATE RCP + INVITE
+# ══════════════════════════════════════════════
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def create_rcp(request):
+    """
+    Body JSON:
+    {
+        "cancer_id": 1,
+        "meeting_datetime": "2026-03-01T10:00:00",
+        "invited_users": [2, 3, 4],
+        "presentation_reason": "...",
+        "clinical_summary": "..."
+    }
+    """
+    cancer = get_object_or_404(Cancer, id=request.data.get('cancer_id'))
+
+    rcp = RcpMeeting.objects.create(
+        cancer=cancer,
+        created_by=request.user,
+        meeting_datetime=request.data.get('meeting_datetime'),
+        status='scheduled',  # ✅ مجدولة — مش مفتوحة
+        presentation_reason=request.data.get('presentation_reason', ''),
+        clinical_summary=request.data.get('clinical_summary', ''),
+    )
+
+    RcpParticipant.objects.create(
+        rcp_meeting=rcp,
+        user=request.user,
+        role_in_rcp="Présentateur"
+    )
+
+    invited = request.data.get('invited_users', [])
+    for uid in invited:
+        try:
+            user = User.objects.get(id=uid)
+            RcpParticipant.objects.get_or_create(
+                rcp_meeting=rcp,
+                user=user,
+                defaults={'role_in_rcp': 'Participant'}
+            )
+            Notification.objects.create(
+                user=user,
+                rcp_meeting=rcp,
+                message=f"📅 Nouveau rendez-vous RCP pour {cancer.patient.full_name} — le {rcp.meeting_datetime.strftime('%d/%m/%Y à %H:%M')}"
+            )
+        except User.DoesNotExist:
+            pass
+
+    return Response({"rcp_id": rcp.id, "message": "RCP créée avec succès"})
+
+
+# ══════════════════════════════════════════════
+# 🟢 DÉMARRER RCP — ▶ زر بدء الاجتماع
+# ══════════════════════════════════════════════
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def start_rcp(request, rcp_id):
+    """
+    فقط المنشئ يقدر يضغط ▶ Démarrer
+    يبدل status من scheduled → ongoing
+    ويبعث إشعار لكل المشاركين
+    """
+    rcp = get_object_or_404(RcpMeeting, id=rcp_id)
+
+    # فقط المنشئ
+    if rcp.created_by != request.user:
+        return Response({"error": "Seul le créateur peut démarrer la réunion"}, status=403)
+
+    # لازم تكون scheduled
+    if rcp.status != 'scheduled':
+        return Response({"error": f"La réunion est déjà {rcp.status}"}, status=400)
+
+    rcp.status = 'ongoing'
+    rcp.save()
+
+    # 🔔 إشعار لكل المشاركين ما عدا المنشئ
+    for participant in rcp.participants.select_related('user'):
+        if participant.user != request.user:
+            Notification.objects.create(
+                user=participant.user,
+                rcp_meeting=rcp,
+                message=f"🟢 RCP démarrée maintenant — {rcp.cancer.patient.full_name} — cliquez pour rejoindre"
+            )
+
+    return Response({"message": "RCP démarrée", "status": "ongoing"})
+
+
+# ══════════════════════════════════════════════
+# 🟢 HISTORIQUE RCP
+# ══════════════════════════════════════════════
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def my_rcp_history(request):
+    meetings = RcpMeeting.objects.filter(
+        participants__user=request.user
+    ).select_related('cancer__patient', 'cancer__cancer_type').distinct().order_by('-created_at')
+
+    data = []
+    for m in meetings:
+        patient = m.cancer.patient
+        decision_text = None
+        if hasattr(m, 'decision'):
+            decision_text = m.decision.decision_text
+
+        data.append({
+            "id":                m.id,
+            "patient":           patient.full_name,
+            "patient_id":        patient.id,
+            "age":               patient.age,
+            "stade":             m.cancer.stade_clinique,
+            "cancer_type":       str(m.cancer.cancer_type) if m.cancer.cancer_type else "",
+            "date":              m.meeting_datetime,
+            "status":            m.status,
+            "decision":          decision_text,
+            "participants_count": m.participants.count(),
+        })
+    return Response(data)
+
+
+# ══════════════════════════════════════════════
+# 🟢 RCP DETAILS
+# ══════════════════════════════════════════════
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def rcp_details(request, rcp_id):
+    rcp = get_object_or_404(RcpMeeting, id=rcp_id)
+    patient = rcp.cancer.patient
+
+    participants = []
+    for p in rcp.participants.select_related('user'):
+        participants.append({
+            "id":       p.user.id,
+            "name":     p.user.get_full_name() or p.user.username,
+            "role":     p.role_in_rcp,
+            "username": p.user.username,
+        })
+
+    messages = []
+    for m in rcp.messages.select_related('user').order_by('created_at'):
+        messages.append({
+            "id":      m.id,
+            "user":    m.user.get_full_name() or m.user.username,
+            "user_id": m.user.id,
+            "message": m.message,
+            "time":    m.created_at.strftime("%H:%M"),
+            "date":    m.created_at.strftime("%d/%m/%Y"),
+        })
+
+    votes = []
+    for v in rcp.votes.select_related('user'):
+        votes.append({
+            "user": v.user.get_full_name() or v.user.username,
+            "vote": v.vote_value,
+        })
+
+    vote_summary = {
+        "approve": rcp.votes.filter(vote_value='approve').count(),
+        "reject":  rcp.votes.filter(vote_value='reject').count(),
+        "abstain": rcp.votes.filter(vote_value='abstain').count(),
+    }
+
+    decision    = None
+    rapport_url = None
+    if hasattr(rcp, 'decision'):
+        decision = rcp.decision.decision_text
+    if hasattr(rcp, 'rapport'):
+        rapport_url = request.build_absolute_uri(rcp.rapport.file.url)
+
+    return Response({
+        "rcp_id":          rcp.id,
+        "status":          rcp.status,
+        "date":            rcp.meeting_datetime,
+        "is_creator":      rcp.created_by == request.user,  # ✅ هل هو المنشئ؟
+        "patient":         patient.full_name,
+        "patient_id":      patient.id,
+        "age":             patient.age,
+        "numero_dossier":  patient.numero_dossier,
+        "stade":           rcp.cancer.stade_clinique,
+        "tnm":             rcp.cancer.tnm,
+        "cancer_type":     str(rcp.cancer.cancer_type) if rcp.cancer.cancer_type else "",
+        "participants":    participants,
+        "messages":        messages,
+        "votes":           votes,
+        "vote_summary":    vote_summary,
+        "decision":        decision,
+        "rapport_url":     rapport_url,
+    })
+
+
+# ══════════════════════════════════════════════
+# 🟢 CHAT
+# ══════════════════════════════════════════════
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def add_message(request, rcp_id):
+    rcp = get_object_or_404(RcpMeeting, id=rcp_id)
+
+    if rcp.status == 'scheduled':
+        return Response({"error": "La réunion n'a pas encore démarré"}, status=403)
+
+    if rcp.status == 'closed':
+        return Response({"error": "La réunion est fermée"}, status=403)
+
+    msg = RcpDiscussion.objects.create(
+        rcp_meeting=rcp,
+        user=request.user,
+        message=request.data.get('message', '').strip()
+    )
+
+    return Response({
+        "id":      msg.id,
+        "user":    request.user.get_full_name() or request.user.username,
+        "user_id": request.user.id,
+        "message": msg.message,
+        "time":    msg.created_at.strftime("%H:%M"),
+        "date":    msg.created_at.strftime("%d/%m/%Y"),
+    })
+
+
+# ══════════════════════════════════════════════
+# 🟢 VOTE
+# ══════════════════════════════════════════════
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def vote(request, rcp_id):
+    rcp = get_object_or_404(RcpMeeting, id=rcp_id)
+
+    vote_value = request.data.get('vote')
+    if vote_value not in ['approve', 'reject', 'abstain']:
+        return Response({"error": "Vote invalide"}, status=400)
+
+    RcpVote.objects.update_or_create(
+        rcp_meeting=rcp,
+        user=request.user,
+        defaults={'vote_value': vote_value}
+    )
+
+    summary = {
+        "approve": rcp.votes.filter(vote_value='approve').count(),
+        "reject":  rcp.votes.filter(vote_value='reject').count(),
+        "abstain": rcp.votes.filter(vote_value='abstain').count(),
+    }
+
+    return Response({"ok": True, "vote_summary": summary})
+
+
+# ══════════════════════════════════════════════
+# 🟢 VALIDATE + PDF
+# ══════════════════════════════════════════════
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def validate_decision(request, rcp_id):
+    rcp = get_object_or_404(RcpMeeting, id=rcp_id)
+
+    decision_text = request.data.get('decision_text', '').strip()
+    if not decision_text:
+        return Response({"error": "Décision requise"}, status=400)
+
+    RcpDecision.objects.update_or_create(
+        rcp_meeting=rcp,
+        defaults={
+            'decision_text': decision_text,
+            'validated_by':  request.user,
+        }
+    )
+
+    rcp.status = 'closed'
+    rcp.save()
+
+    try:
+        _generate_rapport(rcp)
+    except Exception as e:
+        return Response({"message": "Décision validée, erreur PDF", "error": str(e)}, status=207)
+
+    for participant in rcp.participants.select_related('user'):
+        if participant.user != request.user:
+            Notification.objects.create(
+                user=participant.user,
+                rcp_meeting=rcp,
+                message=f"Décision validée pour {rcp.cancer.patient.full_name}: {decision_text[:80]}"
+            )
+
+    return Response({"message": "RCP clôturée, rapport généré"})
+
+
+# ══════════════════════════════════════════════
+# 🟢 DOWNLOAD RAPPORT
+# ══════════════════════════════════════════════
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def download_rapport(request, rcp_id):
+    rcp = get_object_or_404(RcpMeeting, id=rcp_id)
+
+    if not hasattr(rcp, 'rapport'):
+        return Response({"error": "Rapport non disponible"}, status=404)
+
+    return Response({"url": request.build_absolute_uri(rcp.rapport.file.url)})
+
+
+# ══════════════════════════════════════════════
+# 🟢 VERIFY QR
+# ══════════════════════════════════════════════
+@api_view(['GET'])
+@permission_classes([AllowAny])
+def verify_rcp(request, rcp_id):
+    rapport = RcpRapport.objects.filter(rcp_meeting_id=rcp_id).first()
+    if not rapport:
+        return Response({"valid": False, "message": "Rapport non valide"})
+
+    rcp = rapport.rcp_meeting
+    return Response({
+        "valid":    True,
+        "message":  "Rapport authentique",
+        "patient":  rcp.cancer.patient.full_name,
+        "date":     rcp.meeting_datetime,
+        "decision": rcp.decision.decision_text if hasattr(rcp, 'decision') else None,
+    })
+
+
+# ══════════════════════════════════════════════
+# 🟢 NOTIFICATIONS
+# ══════════════════════════════════════════════
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def get_notifications(request):
+    notifs = Notification.objects.filter(user=request.user).order_by('-created_at')[:20]
+    data = []
+    for n in notifs:
+        data.append({
+            "id":         n.id,
+            "message":    n.message,
+            "is_read":    n.is_read,
+            "created_at": n.created_at,
+            "rcp_id":     n.rcp_meeting_id,
+            "patient":    n.rcp_meeting.cancer.patient.full_name if n.rcp_meeting else None,
+        })
+    return Response(data)
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def mark_notification_read(request, notif_id):
+    notif = get_object_or_404(Notification, id=notif_id, user=request.user)
+    notif.is_read = True
+    notif.save()
+    return Response({"ok": True})
+
+
+# ══════════════════════════════════════════════
+# 🔒 HELPER — PDF
+# ══════════════════════════════════════════════
+def _generate_rapport(rcp):
+    try:
+        from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Image as RLImage, Table, TableStyle
+        from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+        from reportlab.lib.pagesizes import A4
+        from reportlab.lib import colors
+        import qrcode
+    except ImportError:
+        raise Exception("Installer: pip install reportlab qrcode[pil]")
+
+    buffer = BytesIO()
+    doc    = SimpleDocTemplate(buffer, pagesize=A4, topMargin=40, bottomMargin=40)
+    styles = getSampleStyleSheet()
+    elements = []
+
+    patient = rcp.cancer.patient
+
+    title_style = ParagraphStyle('title', parent=styles['Heading1'], fontSize=16,
+                                  textColor=colors.HexColor('#1a2f6b'), spaceAfter=6)
+    elements.append(Paragraph("COMPTE RENDU — RÉUNION DE CONCERTATION PLURIDISCIPLINAIRE", title_style))
+    elements.append(Spacer(1, 10))
+
+    info_data = [
+        ["Patient",     patient.full_name,      "Dossier",  patient.numero_dossier],
+        ["Âge",         f"{patient.age} ans",   "Sexe",     patient.get_sexe_display()],
+        ["Type cancer", str(rcp.cancer.cancer_type) if rcp.cancer.cancer_type else "—",
+         "Stade",       rcp.cancer.stade_clinique or "—"],
+        ["TNM",         rcp.cancer.tnm or "—",  "Date RCP", rcp.meeting_datetime.strftime("%d/%m/%Y %H:%M")],
+    ]
+    t = Table(info_data, colWidths=[100, 150, 100, 150])
+    t.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (0, -1), colors.HexColor('#EEF2FF')),
+        ('BACKGROUND', (2, 0), (2, -1), colors.HexColor('#EEF2FF')),
+        ('FONTNAME',   (0, 0), (-1, -1), 'Helvetica'),
+        ('FONTSIZE',   (0, 0), (-1, -1), 10),
+        ('GRID',       (0, 0), (-1, -1), 0.5, colors.HexColor('#DDE4F3')),
+        ('PADDING',    (0, 0), (-1, -1), 6),
+    ]))
+    elements.append(t)
+    elements.append(Spacer(1, 16))
+
+    elements.append(Paragraph("Participants", styles['Heading2']))
+    for p in rcp.participants.select_related('user'):
+        elements.append(Paragraph(f"• {p.user.get_full_name() or p.user.username} — {p.role_in_rcp}", styles['Normal']))
+    elements.append(Spacer(1, 12))
+
+    approve = rcp.votes.filter(vote_value='approve').count()
+    reject  = rcp.votes.filter(vote_value='reject').count()
+    abstain = rcp.votes.filter(vote_value='abstain').count()
+    elements.append(Paragraph("Résultats du Vote", styles['Heading2']))
+    elements.append(Paragraph(f"Approuvé: {approve}   Rejeté: {reject}   Abstention: {abstain}", styles['Normal']))
+    elements.append(Spacer(1, 12))
+
+    if hasattr(rcp, 'decision'):
+        elements.append(Paragraph("Décision Validée", styles['Heading2']))
+        elements.append(Paragraph(rcp.decision.decision_text, styles['Normal']))
+        elements.append(Spacer(1, 20))
+
+    qr_url = f"http://localhost:8000/api/verify/{rcp.id}/"
+    qr_img = qrcode.make(qr_url)
+    qr_buf = BytesIO()
+    qr_img.save(qr_buf, format='PNG')
+    qr_buf.seek(0)
+    elements.append(Paragraph("Vérification d'authenticité", styles['Heading3']))
+    elements.append(RLImage(qr_buf, width=100, height=100))
+
+    doc.build(elements)
+
+    rapport, _ = RcpRapport.objects.get_or_create(rcp_meeting=rcp)
+    rapport.file.save(
+        f"RCP_{rcp.id}_{patient.numero_dossier}.pdf",
+        ContentFile(buffer.getvalue()),
+        save=True
+    )
+
+
+url
+
+from django.urls import path
+from . import views
+
+urlpatterns = [
+    # ── Patients & Cancers ──────────────────────────────────────
+    path('mes-patients/',                        views.mes_patients,           name='mes-patients'),
+    path('patients/<int:patient_id>/cancers/',   views.patient_cancers,        name='patient-cancers'),
+    path('medecins/',                            views.list_medecins,          name='list-medecins'),
+
+    # ── Gestion RCP ─────────────────────────────────────────────
+    path('create/',                          views.create_rcp,             name='create-rcp'),
+    path('history/',                         views.my_rcp_history,         name='rcp-history'),
+    path('<int:rcp_id>/',                   views.rcp_details,            name='rcp-details'),
+
+    # ── Chat, Vote, Décision ────────────────────────────────────
+    path('<int:rcp_id>/start/',             views.start_rcp,              name='rcp-start'),
+    path('<int:rcp_id>/chat/',              views.add_message,            name='rcp-chat'),
+    path('<int:rcp_id>/vote/',              views.vote,                   name='rcp-vote'),
+    path('<int:rcp_id>/validate/',          views.validate_decision,      name='rcp-validate'),
+
+    # ── Rapport ─────────────────────────────────────────────────
+    path('<int:rcp_id>/rapport/',           views.download_rapport,       name='rcp-rapport'),
+
+    # ── Notifications ────────────────────────────────────────────
+    path('notifications/',                       views.get_notifications,      name='notifications'),
+    path('notifications/<int:notif_id>/read/',   views.mark_notification_read, name='notif-read'),
+
+    # ── Vérification QR (public) ────────────────────────────────
+    path('verify/<int:rcp_id>/',                views.verify_rcp,             name='verify-rcp'),
+]
+
+model 
+
+from django.db import models
+from django.contrib.auth import get_user_model
+from patients.models import Cancer
+
+
+User = get_user_model()
+
+
+class RcpMeeting(models.Model):
+    STATUS_CHOICES = [
+        ('scheduled', 'Scheduled'),
+        ('ongoing',   'Ongoing'),
+        ('closed',    'Closed'),
+        ('cancelled', 'Cancelled'),
+    ]
+
+    cancer             = models.ForeignKey('patients.Cancer', on_delete=models.CASCADE, related_name='rcp_meetings')
+    created_by         = models.ForeignKey(User, on_delete=models.CASCADE, related_name='created_rcps')
+    meeting_datetime   = models.DateTimeField()
+    status             = models.CharField(max_length=20, choices=STATUS_CHOICES, default='scheduled')
+    presentation_reason = models.TextField(blank=True, null=True)
+    clinical_summary   = models.TextField(blank=True, null=True)
+    created_at         = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"RCP #{self.id} — {self.cancer.patient.full_name} ({self.status})"
+
+
+class RcpParticipant(models.Model):
+    rcp_meeting  = models.ForeignKey(RcpMeeting, on_delete=models.CASCADE, related_name='participants')
+    user         = models.ForeignKey(User, on_delete=models.CASCADE)
+    role_in_rcp  = models.CharField(max_length=100)
+
+    class Meta:
+        unique_together = ('rcp_meeting', 'user')
+
+
+class RcpDiscussion(models.Model):
+    rcp_meeting = models.ForeignKey(RcpMeeting, on_delete=models.CASCADE, related_name='messages')
+    user        = models.ForeignKey(User, on_delete=models.CASCADE)
+    message     = models.TextField()
+    created_at  = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['created_at']
+
+
+class RcpVote(models.Model):
+    VOTE_CHOICES = [
+        ('approve', 'Approve'),
+        ('reject',  'Reject'),
+        ('abstain', 'Abstain'),
+    ]
+
+    rcp_meeting  = models.ForeignKey(RcpMeeting, on_delete=models.CASCADE, related_name='votes')
+    user         = models.ForeignKey(User, on_delete=models.CASCADE)
+    vote_value   = models.CharField(max_length=20, choices=VOTE_CHOICES)
+
+    class Meta:
+        unique_together = ('rcp_meeting', 'user')
+
+
+class RcpDecision(models.Model):
+    rcp_meeting   = models.OneToOneField(RcpMeeting, on_delete=models.CASCADE, related_name='decision')
+    decision_text = models.TextField()
+    validated_by  = models.ForeignKey(User, on_delete=models.CASCADE)
+    validated_at  = models.DateTimeField(auto_now_add=True)
+
+
+class RcpRapport(models.Model):
+    rcp_meeting  = models.OneToOneField(RcpMeeting, on_delete=models.CASCADE, related_name='rapport')
+    file         = models.FileField(upload_to='rapports/')
+    generated_at = models.DateTimeField(auto_now_add=True)
+
+
+class Notification(models.Model):
+    user        = models.ForeignKey(User, on_delete=models.CASCADE, related_name='notifications')
+    rcp_meeting = models.ForeignKey(RcpMeeting, on_delete=models.CASCADE, null=True, blank=True)
+    message     = models.TextField()
+    is_read     = models.BooleanField(default=False)
+    created_at  = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-created_at']
