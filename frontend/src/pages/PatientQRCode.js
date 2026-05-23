@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { useParams } from 'react-router-dom';
 
 // ─── QR Code generator (pure JS, sans librairie externe) ─────────────────────
 // Utilise l'API QR Server gratuite
@@ -17,12 +18,42 @@ function getPublicUrl() {
 
 // ─── Composant principal ──────────────────────────────────────────────────────
 
-export default function PatientQRCode({ patient }) {
-  const [showModal, setShowModal] = useState(false);
+export default function PatientQRCode({ patient: propPatient }) {
+  const { id } = useParams();
+  const [showModal, setShowModal] = useState(Boolean(id));
   const [copied,    setCopied]    = useState(false);
+  const [loading,   setLoading]   = useState(!propPatient && Boolean(id));
+  const [fetchedPatient, setFetchedPatient] = useState(null);
   const printRef = useRef();
+  const patient = propPatient || fetchedPatient;
 
-  if (!patient) return null;
+  useEffect(() => {
+    if (propPatient || !id) return;
+
+    const token = localStorage.getItem('access') ||
+                  localStorage.getItem('access_token') ||
+                  localStorage.getItem('token') ||
+                  sessionStorage.getItem('access_token');
+
+    const headers = token ? { Authorization: `Bearer ${token}` } : {};
+    setLoading(true);
+    fetch(`/api/patients/${id}/`, { headers })
+      .then(res => {
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        return res.json();
+      })
+      .then(data => setFetchedPatient(data))
+      .catch(() => setFetchedPatient(null))
+      .finally(() => setLoading(false));
+  }, [id, propPatient]);
+
+  if (!patient) {
+    return loading ? (
+      <div style={{ padding: 24, color: '#64748b', fontSize: 14 }}>
+        Chargement du dossier patient…
+      </div>
+    ) : null;
+  }
 
   const publicUrl = `${getPublicUrl()}/patient-public/${patient.id}?token=${btoa(patient.numero_dossier || patient.id)}`;
   const qrUrl     = getQRUrl(publicUrl, 300);

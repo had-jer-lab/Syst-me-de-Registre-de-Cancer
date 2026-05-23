@@ -90,16 +90,22 @@ def statistics_view(request):
             wilaya_name = p.commune.wilaya.name
         elif p.hospital and p.hospital.wilaya:
             wilaya_name = p.hospital.wilaya.name
+        wilaya_name = wilaya_name or 'Inconnue'
 
         # Daira/Commune
-        daira_name = p.commune.name if p.commune else None
+        daira_name = p.commune.name if p.commune else 'Inconnue'
 
-        # Année diagnostic
-        year = cancer.date_diagnostic.year if cancer.date_diagnostic else None
+        # Année diagnostic, fallback to record creation year if missing
+        year = cancer.date_diagnostic.year if cancer.date_diagnostic else (cancer.created_at.year if cancer.created_at else today.year)
 
         # Mois
         month_names = ['Jan','Fév','Mar','Avr','Mai','Jun','Jul','Aoû','Sep','Oct','Nov','Déc']
-        month = month_names[cancer.date_diagnostic.month - 1] if cancer.date_diagnostic else 'Jan'
+        if cancer.date_diagnostic:
+            month = month_names[cancer.date_diagnostic.month - 1]
+        elif cancer.created_at:
+            month = month_names[cancer.created_at.month - 1]
+        else:
+            month = 'Inconnu'
 
         # Stade
         stade = cancer.stade_clinique or 'Stade I'

@@ -79,6 +79,51 @@ const Icon = {
 const AGE_GROUPS = ["0–14", "15–29", "30–44", "45–59", "60+"];
 let YEARS = [2018, 2019, 2020, 2021, 2022, 2023, 2024];
 const MONTHS = ["Jan","Fév","Mar","Avr","Mai","Jun","Jul","Aoû","Sep","Oct","Nov","Déc"];
+
+function getAgeGroup(age) {
+  const value = Number(age);
+  if (Number.isNaN(value)) return 'Inconnu';
+  if (value <= 14) return '0–14';
+  if (value <= 29) return '15–29';
+  if (value <= 44) return '30–44';
+  if (value <= 59) return '45–59';
+  return '60+';
+}
+
+function patientsToStatisticRows(patients = []) {
+  if (!Array.isArray(patients)) return [];
+  return patients.flatMap(patient => {
+    const cancers = Array.isArray(patient.cancers) && patient.cancers.length > 0
+      ? patient.cancers
+      : patient.dernier_cancer ? [patient.dernier_cancer] : [];
+
+    return cancers.map(cancer => {
+      const cancerName = cancer.cancer_type_name || cancer.organe || 'Inconnu';
+      const stage = cancer.stade_clinique || cancer.stade_pathologique || cancer.stade || '—';
+      const dateStr = cancer.date_diagnostic || patient.created_at || '';
+      const date = new Date(dateStr);
+      const year = !Number.isNaN(date.getTime()) ? date.getFullYear() : new Date().getFullYear();
+      const month = !Number.isNaN(date.getTime()) ? MONTHS[date.getMonth()] : '';
+      return {
+        patient_id: patient.id,
+        wilaya: patient.wilaya_name || 'Inconnue',
+        daira: patient.commune_name || 'Inconnue',
+        sex: patient.sexe || '',
+        age: getAgeGroup(patient.age),
+        cancer: cancerName,
+        cancer_id: cancer.cancer_type || cancer.id || '',
+        year,
+        month,
+        stade: stage,
+        cases: 1,
+        traitement: cancer.treatments?.[0]?.type_traitement || 'Inconnu',
+        mode: cancer.mode || cancer.diagnostic_mode || 'Inconnu',
+        validated: cancer.is_validated || false,
+      };
+    });
+  });
+}
+
 // Wilayas d'Algérie
 let WILAYAS = [
   "Adrar", "Chlef", "Laghouat", "Oum El Bouaghi", "Batna", "Béjaïa", "Biskra",
@@ -467,10 +512,7 @@ function deducePatientStatus(d) {
 
 // ── EXTRACTION DES ANNÉES DISPONIBLES ──────────────────────────────────────
 function getAvailableYears(dataSource = null) {
-  const data = Array.isArray(dataSource) && dataSource.length > 0
-    ? dataSource
-    : [];
-  
+  const data = Array.isArray(dataSource) && dataSource.length > 0 ? dataSource : [];
   if (!data.length) return [];
   
   // Extract and sort all years from data, no filtering
@@ -983,7 +1025,7 @@ function MapClickHandler({ enabled, onMapClick }) {
   return null;
 }
 
-function ChoroplethMap({ data, apiData, rawData, cancers, patients }) {
+function ChoroplethMap({ data, apiData, rawData, cancers, patients, sourceData: propSourceData }) {
   const [selectedWilaya, setSelectedWilaya] = useState(null);
   const [mapRef, setMapRef] = useState(null);
   const [currentZoom, setCurrentZoom] = useState(5);
@@ -1012,6 +1054,13 @@ function ChoroplethMap({ data, apiData, rawData, cancers, patients }) {
   const [selectedEnvZone, setSelectedEnvZone] = useState(null);
   const [mainApiData, setMainApiData] = useState(null);
   const [mainApiLoading, setMainApiLoading] = useState(true);
+
+  const sourceData = useMemo(() => {
+    if (Array.isArray(propSourceData) && propSourceData.length > 0) return propSourceData;
+    if (Array.isArray(apiData?.raw_data) && apiData.raw_data.length > 0) return apiData.raw_data;
+    if (Array.isArray(rawData) && rawData.length > 0) return rawData;
+    return [];
+  }, [propSourceData, apiData, rawData]);
 
   // ── Nouveaux états pour les 3 panneaux ──
   const [activeMarkerType, setActiveMarkerType] = useState(null);
@@ -1239,12 +1288,7 @@ function ChoroplethMap({ data, apiData, rawData, cancers, patients }) {
            document.cookie.split(';').find(c => c.trim().startsWith('token='))?.split('=')[1];
   }, []);
 
-  const sourceData = useMemo(() => 
-    Array.isArray(mainApiData?.raw_data) && mainApiData.raw_data.length > 0 
-      ? mainApiData.raw_data 
-      : (Array.isArray(rawData) && rawData.length > 0 ? rawData : []),
-    [mainApiData, rawData]
-  );
+  // sourceData already defined above from propSourceData
 
   // Fetch main statistics data from API on component mount
   useEffect(() => {
@@ -3645,14 +3689,31 @@ export default function StatBuilder() {
   const [pivotMode, setPivotMode] = useState('absolute'); // 'absolute' or 'percentage'
 
   // Compute resolved data to avoid shadowing
-  const resolvedRawData = useMemo(() => 
-    Array.isArray(apiData?.raw_data) && apiData.raw_data.length > 0
-      ? apiData.raw_data.filter(d => d?.wilaya)
-      : [],
-    [apiData]
-  );
+  const resolvedRawData = useMemo(() => {
+    const patientRows = patientsToStatisticRows(patients);
+    if (Array.isArray(patientRows) && patientRows.length > 0) {
+      return patientRows;
+    }
+    return Array.isArray(apiData?.raw_data) && apiData.raw_data.length > 0
+      ? apiData.raw_data
+      : [];
+  }, [apiData, patients]);
 
-  const cancers = useMemo(() => [...new Set(patients.map(p => p.cancer).filter(Boolean))], [patients]);
+  const cancers = useMemo(() => {
+    const set = new Set();
+    patients.forEach(patient => {
+      if (Array.isArray(patient.cancers)) {
+        patient.cancers.forEach(cancer => {
+          const name = cancer.cancer_type_name || cancer.organe;
+          if (name) set.add(name);
+        });
+      }
+      if (patient.dernier_cancer?.organe) {
+        set.add(patient.dernier_cancer.organe);
+      }
+    });
+    return [...set];
+  }, [patients]);
 
   const resolvedCancers = useMemo(() => {
     const CANCERS_FROM_API = Array.isArray(apiData?.cancer_types) && apiData.cancer_types.length > 0
@@ -4398,9 +4459,7 @@ export default function StatBuilder() {
   function buildData() {
     setLoading(true);
     setTimeout(() => {
-      const SOURCE = Array.isArray(apiData?.raw_data) && apiData.raw_data.length > 0
-        ? apiData.raw_data
-        : [];
+      const SOURCE = resolvedRawData;
       let data = SOURCE.filter(d =>
         (!filters.sex||d.sex===filters.sex)&&(!filters.age||d.age===filters.age)&&
         (!filters.yearStart||d.year>=Number(filters.yearStart))&&(!filters.yearEnd||d.year<=Number(filters.yearEnd))&&
@@ -4735,7 +4794,7 @@ export default function StatBuilder() {
       return <KPIBoard filters={filters} apiData={apiData} rawData={resolvedRawData} cancers={resolvedCancers} />;
     }
     if(selAn === "by_wilaya") {
-      return <ChoroplethMap data={chartData} apiData={apiData} rawData={resolvedRawData} cancers={resolvedCancers} patients={patients} />;
+      return <ChoroplethMap data={chartData} apiData={apiData} rawData={resolvedRawData} cancers={resolvedCancers} patients={patients} sourceData={resolvedRawData} />;
     }
     
     if(selAn === "compare_wilayas") {
@@ -4862,7 +4921,7 @@ export default function StatBuilder() {
     }
     
     if(selAn === "choropleth") {
-      return <ChoroplethMap apiData={apiData} rawData={resolvedRawData} cancers={resolvedCancers} patients={patients} />;
+      return <ChoroplethMap apiData={apiData} rawData={resolvedRawData} cancers={resolvedCancers} patients={patients} sourceData={resolvedRawData} />;
     }
     
     if(!safeChartData.length) return <div style={{textAlign:"center",color:"#94a3b8",padding:36,fontSize:13}}>Aucune donnée pour ces filtres</div>;
@@ -4983,7 +5042,7 @@ export default function StatBuilder() {
   }).join('') : '');
 
   const kpiHTML = !isKpi ? '' : (() => {
-    const src = Array.isArray(apiData?.raw_data) && apiData.raw_data.length>0 ? apiData.raw_data : FALLBACK_DATA;
+    const src = resolvedRawData;
     const t = src.reduce((s,d)=>s+d.cases,0);
     const m = src.filter(d=>d.sex==='M').reduce((s,d)=>s+d.cases,0);
     const f = src.filter(d=>d.sex==='F').reduce((s,d)=>s+d.cases,0);
@@ -5149,7 +5208,7 @@ export default function StatBuilder() {
 
   // Complete Report PDF Export (6-page professional report)
   const handleExportCompletePDF = () => {
-    const src = Array.isArray(apiData?.raw_data) && apiData.raw_data.length>0 ? apiData.raw_data : FALLBACK_DATA;
+    const src = resolvedRawData;
     const totalCases = src.reduce((s,d)=>s+d.cases,0);
     const maleCases = src.filter(d=>d.sex==='M').reduce((s,d)=>s+d.cases,0);
     const femaleCases = src.filter(d=>d.sex==='F').reduce((s,d)=>s+d.cases,0);

@@ -516,7 +516,7 @@ export default function Page2() {
       />
 
       {/* ── Boutons navigation — inchangés ── */}
-      <BtnRow onBack={() => navigate('/page1')} onNext={() => navigate('/page6')} nextLabel="Suivant" />
+      <BtnRow onBack={() => navigate('/page1')} onNext={() => navigate('/page3')} nextLabel="Suivant" />
     </Layout>
   );
 }

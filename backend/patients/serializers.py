@@ -146,7 +146,7 @@ class PatientListSerializer(serializers.ModelSerializer):
     wilaya_name   = serializers.CharField(source='commune.wilaya.name', read_only=True)
     latitude      = serializers.FloatField(source='commune.latitude', read_only=True)
     longitude     = serializers.FloatField(source='commune.longitude', read_only=True)
-    wilasya_name   = serializers.CharField(source='commune.wilaya.name', read_only=True)
+    wilaya_name   = serializers.CharField(source='commune.wilaya.name', read_only=True)
     hospital_name = serializers.CharField(source='hospital.name',  read_only=True)
     medecin_nom   = serializers.SerializerMethodField()
     # Résumé cancer (le plus récent)
